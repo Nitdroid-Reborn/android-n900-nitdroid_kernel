@@ -247,6 +247,9 @@ static int __devinit twl4030_wdt_probe(struct platform_device *pdev)
 			twl4030_wdt_debugfs, &wdt->poweroff_on_suspend);
 #endif
 	twl4030_wdt_dev = pdev;
+	
+	twl4030_wdt_disable(wdt);
+	
 	return 0;
 }
 
