@@ -484,6 +484,8 @@ static void set_fb_fix(struct fb_info *fbi)
 	}
 	fix->accel		= FB_ACCEL_OMAP1610;
 	fix->line_length	= var->xres_virtual * bpp / 8;
+	fix->xpanstep		= var->xres_virtual > var->xres ? 1 : 0;
+	fix->ypanstep		= var->yres_virtual > var->yres ? 1 : 0;
 }
 
 static int set_color_mode(struct omapfb_plane_struct *plane,
@@ -620,7 +622,7 @@ static int set_fb_var(struct fb_info *fbi,
 		var->xres_virtual = var->xres;
 	if (var->yres_virtual < var->yres)
 		var->yres_virtual = var->yres;
-	max_frame_size = fbdev->mem_desc.region[mem_idx].size;
+	max_frame_size = def_vxres * def_vyres * bpp / 8;
 	line_size = var->xres_virtual * bpp / 8;
 	if (line_size * var->yres_virtual > max_frame_size) {
 		/* Try to keep yres_virtual first */
