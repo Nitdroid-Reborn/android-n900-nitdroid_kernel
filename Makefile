@@ -1,8 +1,8 @@
 VERSION = 2
 PATCHLEVEL = 6
 SUBLEVEL = 28
-EXTRAVERSION =
-NAME = Erotic Pickled Herring
+EXTRAVERSION = .NIT.xx
+NAME = Maemo
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
@@ -17,7 +17,7 @@ NAME = Erotic Pickled Herring
 MAKEFLAGS += -rR --no-print-directory
 
 # Add custom flags here to avoid conflict with updates
-EXTRAVERSION := $(EXTRAVERSION)-omap1
+#EXTRAVERSION := $(EXTRAVERSION)-omap1
 
 # We are using a recursive build, so we need to do a little thinking
 # to get the ordering right.
