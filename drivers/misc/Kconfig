@@ -48,6 +48,12 @@ config ANDROID_TIMED_GPIO
 	depends on GENERIC_GPIO && ANDROID_TIMED_OUTPUT
 	default n
 
+config ANDROID_LOW_MEMORY_KILLER
+	bool "Android Low Memory Killer"
+	default N
+	---help---
+	  Register processes to be killed when memory is low
+
 
 config ATMEL_PWM
 	tristate "Atmel AT32/AT91 PWM support"
