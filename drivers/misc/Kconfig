@@ -27,6 +27,10 @@ config APANIC_PLABEL
 	  If your platform uses a different flash partition label for storing
 	  crashdumps, enter it here.
 
+config ANDROID_BINDER_IPC
+	bool "Android Binder IPC Driver"
+	default n
+
 config ATMEL_PWM
 	tristate "Atmel AT32/AT91 PWM support"
 	depends on AVR32 || ARCH_AT91SAM9263 || ARCH_AT91SAM9RL || ARCH_AT91CAP9

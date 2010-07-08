@@ -41,3 +41,4 @@ obj-$(CONFIG_SSI_CMT_SPEECH)	+= cmt-speech/
 obj-$(CONFIG_SSI_CHAR)     += ssi-char/
 obj-$(CONFIG_PANIC_INFO_BUFF)	+= panic_info_buff.o
 obj-$(CONFIG_APANIC)            += apanic.o
+obj-$(CONFIG_ANDROID_BINDER_IPC) += binder.o
