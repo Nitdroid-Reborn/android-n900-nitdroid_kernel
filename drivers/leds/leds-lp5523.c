@@ -120,6 +120,8 @@ struct lp5523_led {
 	u8			led_nr;
 	u8			led_current;
 	struct led_classdev     cdev;
+	struct work_struct	work;
+	u8 brightness;
 };
 
 struct lp5523_chip {
@@ -472,10 +474,10 @@ static ssize_t lp5523_selftest(struct device *dev,
 	return pos;
 }
 
-static void lp5523_set_brightness(struct led_classdev *cdev,
-			     enum led_brightness brightness)
+static void lp5523_set_brightness_work(struct work_struct  *work)
 {
-	struct lp5523_led *led = cdev_to_led(cdev);
+        struct lp5523_led *led =
+                container_of(work, struct lp5523_led, work);
 	struct lp5523_chip *chip = led_to_lp5523(led);
 	struct i2c_client *client = chip->client;
 
@@ -483,9 +485,19 @@ static void lp5523_set_brightness(struct led_classdev *cdev,
 
 	lp5523_write(client,
 		     LP5523_REG_LED_PWM_BASE + led->led_nr,
-		     (u8)brightness);
+		     led->brightness);
 
 	mutex_unlock(&chip->lock);
+}
+static void lp5523_set_brightness(struct led_classdev *cdev,
+			     enum led_brightness brightness)
+{
+	struct lp5523_led *led = cdev_to_led(cdev);
+	struct lp5523_chip *chip = led_to_lp5523(led);
+	struct i2c_client *client = chip->client;
+
+	led->brightness = (u8)brightness;
+	schedule_work(&led->work);
 }
 
 static int lp5523_do_store_load(struct lp5523_engine *engine,
@@ -792,6 +804,7 @@ static int __init lp5523_init_led(struct lp5523_led *led, struct device *dev,
 
 	led->cdev.name = name;
 	led->cdev.brightness_set = lp5523_set_brightness;
+	INIT_WORK( &led->work, lp5523_set_brightness_work); 
 	if (led_classdev_register(dev, &led->cdev) < 0) {
 		dev_err(dev, "couldn't register led %d\n", id);
 		return -1;
