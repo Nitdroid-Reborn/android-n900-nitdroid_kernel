@@ -156,8 +156,9 @@ void omap_prcm_arch_reset(char mode)
 	 * HACK for RX51 boards previous to B3 which
 	 * doesn't have a reset line to isp1707 transceiver
 	 */
+#if 0
 	musb_emergency_stop();
-
+#endif
 	prm_set_mod_reg_bits(OMAP_RST_GS, prcm_offs, RM_RSTCTRL);
 }
 
