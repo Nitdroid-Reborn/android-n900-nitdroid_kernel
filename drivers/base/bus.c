@@ -432,7 +432,7 @@ static void device_remove_attrs(struct bus_type *bus, struct device *dev)
 	}
 }
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_BUS
 static int make_deprecated_bus_links(struct device *dev)
 {
 	return sysfs_create_link(&dev->kobj,

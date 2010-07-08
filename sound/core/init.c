@@ -380,7 +380,7 @@ int snd_card_disconnect(struct snd_card *card)
 		snd_printk(KERN_ERR "not all devices for card %i can be disconnected\n", card->number);
 
 	snd_info_card_disconnect(card);
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_SOUND
 	if (card->card_dev) {
 		device_unregister(card->card_dev);
 		card->card_dev = NULL;
@@ -550,7 +550,7 @@ int snd_card_register(struct snd_card *card)
 
 	if (snd_BUG_ON(!card))
 		return -EINVAL;
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_SOUND
 	if (!card->card_dev) {
 		card->card_dev = device_create(sound_class, card->dev,
 					       MKDEV(0, 0), NULL,

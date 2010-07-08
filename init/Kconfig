@@ -419,14 +419,10 @@ config CGROUP_MEM_RES_CTLR
 	  This config option also selects MM_OWNER config option, which
 	  could in turn add some fork/exit overhead.
 
-config SYSFS_DEPRECATED
-	bool
-
-config SYSFS_DEPRECATED_V2
-	bool "Create deprecated sysfs files"
+config SYSFS_DEPRECATED_FEATURES
+	bool "Select deprecated sysfs features"
 	depends on SYSFS
 	default y
-	select SYSFS_DEPRECATED
 	help
 	  This option creates deprecated symlinks such as the
 	  "device"-link, the <subsystem>:<name>-link, and the
@@ -444,6 +440,53 @@ config SYSFS_DEPRECATED_V2
 
 	  If you are using a distro with the most recent userspace
 	  packages, it should be safe to say N here.
+
+if SYSFS_DEPRECATED_FEATURES
+
+config SYSFS_DEPRECATED_UEVENT
+	bool "Send deprecated core uevents"
+	default y
+	help
+	  This option enables sending deprecated uevents
+
+config SYSFS_DEPRECATED_LINKS
+	bool "Create deprecated sysfs symlinks"
+	default y
+	help
+	  This option creates deprecated symlinks
+
+config SYSFS_DEPRECATED_BUS
+	bool "Create deprecated sysfs files for bus"
+	default y
+	help
+	  This option creates deprecated symlinks for bus
+
+config SYSFS_DEPRECATED_BLOCK
+	bool "Create deprecated top level block hierarchy"
+	depends on BLOCK
+	default y
+	help
+	  This option creates deprecated top level block hierarchy
+
+config SYSFS_DEPRECATED_PART
+	bool "DON'T create /sys/block partition links"
+	default y
+	help
+	  This option disables partition symlinks in /sys/block
+
+config SYSFS_DEPRECATED_SCSI
+	bool "Create deprecated sysfs files for scsi devices"
+	default y
+	help
+	  This option creates deprecated symlinks for scsi device
+
+config SYSFS_DEPRECATED_SOUND
+	bool "Create deprecated sysfs files for sound"
+	default y
+	help
+	  This option creates deprecated symlinks for sound devices
+
+endif
 
 config PROC_PID_CPUSET
 	bool "Include legacy /proc/<pid>/cpuset file"

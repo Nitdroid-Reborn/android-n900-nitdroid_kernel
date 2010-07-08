@@ -390,7 +390,7 @@ struct Scsi_Host *scsi_host_alloc(struct scsi_host_template *sht, int privsize)
 	device_initialize(&shost->shost_gendev);
 	snprintf(shost->shost_gendev.bus_id, BUS_ID_SIZE, "host%d",
 		shost->host_no);
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_SCSI
 	shost->shost_gendev.bus = &scsi_bus_type;
 #endif
 	shost->shost_gendev.type = &scsi_host_type;

@@ -473,7 +473,7 @@ void register_disk(struct gendisk *disk)
 
 	if (device_add(ddev))
 		return;
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_PART
 	err = sysfs_create_link(block_depr, &ddev->kobj,
 				kobject_name(&ddev->kobj));
 	if (err) {
@@ -640,7 +640,7 @@ void del_gendisk(struct gendisk *disk)
 	kobject_put(disk->part0.holder_dir);
 	kobject_put(disk->slave_dir);
 	disk->driverfs_dev = NULL;
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_PART
 	sysfs_remove_link(block_depr, dev_name(disk_to_dev(disk)));
 #endif
 	device_del(disk_to_dev(disk));

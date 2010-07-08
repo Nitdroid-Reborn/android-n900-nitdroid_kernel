@@ -22,7 +22,7 @@
 #include "blk.h"
 
 static DEFINE_MUTEX(block_class_lock);
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_PART
 struct kobject *block_depr;
 #endif
 
@@ -788,7 +788,7 @@ static int __init genhd_device_init(void)
 
 	register_blkdev(BLOCK_EXT_MAJOR, "blkext");
 
-#ifndef CONFIG_SYSFS_DEPRECATED
+#ifndef CONFIG_SYSFS_DEPRECATED_PART
 	/* create top-level block dir */
 	block_depr = kobject_create_and_add("block", NULL);
 #endif

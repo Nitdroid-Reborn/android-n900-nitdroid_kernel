@@ -173,7 +173,7 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 	if (dev->driver)
 		add_uevent_var(env, "DRIVER=%s", dev->driver->name);
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_UEVENT
 	if (dev->class) {
 		struct device *parent = dev->parent;
 
@@ -549,7 +549,7 @@ void device_initialize(struct device *dev)
 	set_dev_node(dev, -1);
 }
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_LINKS
 static struct kobject *get_device_parent(struct device *dev,
 					 struct device *parent)
 {
@@ -667,7 +667,7 @@ static int device_add_class_symlinks(struct device *dev)
 	if (error)
 		goto out;
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_LINKS
 	/* stacked class devices need a symlink in the class directory */
 	if (dev->kobj.parent != &dev->class->p->class_subsys.kobj &&
 	    device_is_not_partition(dev)) {
@@ -743,7 +743,7 @@ static void device_remove_class_symlinks(struct device *dev)
 	if (!dev->class)
 		return;
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_LINKS
 	if (dev->parent && device_is_not_partition(dev)) {
 		char *class_name;
 
@@ -1347,7 +1347,7 @@ int device_rename(struct device *dev, char *new_name)
 	pr_debug("device: '%s': %s: renaming to '%s'\n", dev->bus_id,
 		 __func__, new_name);
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_LINKS
 	if ((dev->class) && (dev->parent))
 		old_class_name = make_class_name(dev->class->name, &dev->kobj);
 #endif
@@ -1366,7 +1366,7 @@ int device_rename(struct device *dev, char *new_name)
 		goto out;
 	}
 
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_LINKS
 	if (old_class_name) {
 		new_class_name = make_class_name(dev->class->name, &dev->kobj);
 		if (new_class_name) {
@@ -1405,7 +1405,7 @@ static int device_move_class_links(struct device *dev,
 				   struct device *new_parent)
 {
 	int error = 0;
-#ifdef CONFIG_SYSFS_DEPRECATED
+#ifdef CONFIG_SYSFS_DEPRECATED_LINKS
 	char *class_name;
 
 	class_name = make_class_name(dev->class->name, &dev->kobj);
