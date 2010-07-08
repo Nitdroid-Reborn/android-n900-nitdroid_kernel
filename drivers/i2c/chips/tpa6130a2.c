@@ -207,6 +207,7 @@ int tpa6130a2_get_volume(void)
 
 	return vol;
 }
+EXPORT_SYMBOL(tpa6130a2_get_volume);
 
 int tpa6130a2_set_volume(int vol)
 {
@@ -227,6 +228,7 @@ int tpa6130a2_set_volume(int vol)
 
 	return ret;
 }
+EXPORT_SYMBOL(tpa6130a2_set_volume);
 
 static void tpa6130a2_power_on(void)
 {
@@ -271,6 +273,7 @@ void tpa6130a2_set_enabled(int enabled)
 		tpa6130a2_power_off();
 	}
 }
+EXPORT_SYMBOL(tpa6130a2_set_enabled);
 
 /* Sysfs interface */
 #define tpa6130a2_sys_property(name)					\
