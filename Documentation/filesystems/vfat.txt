@@ -137,6 +137,11 @@ errors=panic|continue|remount-ro
 		 without doing anything or remopunt the partition in
 		 read-only mode (default behavior).
 
+errors=panic|continue|remount-ro
+	      -- specify FAT behavior on critical errors: panic, continue
+		 without doing anything or remount the partition in
+		 read-only mode (default behavior).
+
 <bool>: 0,1,yes,no,true,false
 
 TODO
