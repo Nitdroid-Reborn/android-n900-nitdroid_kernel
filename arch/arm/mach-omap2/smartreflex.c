@@ -890,7 +890,7 @@ int sr_voltagescale_vcbypass(u32 target_opp, u32 current_opp,
 		return SR_FAIL;
 	}
 
-	if (sr->is_autocomp_active) {
+	if (sr->is_autocomp_active && !sr->is_sr_reset) {
 		WARN(1, "SR: Must not transmit VCBYPASS command while SR is "
 		     "active");
 		return SR_FAIL;
@@ -1001,11 +1001,6 @@ static ssize_t omap_sr_vdd2_autocomp_store(struct kobject *kobj,
 
 	if (sscanf(buf, "%hu", &value) != 1 || (value > 1)) {
 		printk(KERN_ERR "sr_vdd2_autocomp: Invalid value\n");
-		return -EINVAL;
-	}
-
-	if (value != 0) {
-		pr_warning("VDD2 smartreflex is broken\n");
 		return -EINVAL;
 	}
 
