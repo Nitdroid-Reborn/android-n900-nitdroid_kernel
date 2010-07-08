@@ -54,6 +54,10 @@ config ANDROID_LOW_MEMORY_KILLER
 	---help---
 	  Register processes to be killed when memory is low
 
+config UID_STAT
+	bool "UID based statistics tracking exported to /proc/uid_stat"
+	default n
+
 config KERNEL_DEBUGGER_CORE
 	bool "Kernel Debugger Core"
 	default n

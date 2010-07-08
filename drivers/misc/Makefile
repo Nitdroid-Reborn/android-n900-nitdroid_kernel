@@ -48,3 +48,4 @@ obj-$(CONFIG_ANDROID_TIMED_OUTPUT) += timed_output.o
 obj-$(CONFIG_ANDROID_TIMED_GPIO)   += timed_gpio.o
 obj-$(CONFIG_ANDROID_LOW_MEMORY_KILLER) += lowmemorykiller.o
 obj-$(CONFIG_KERNEL_DEBUGGER_CORE) += kernel_debugger.o
+obj-$(CONFIG_UID_STAT)          += uid_stat.o
