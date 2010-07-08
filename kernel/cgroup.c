@@ -46,6 +46,7 @@
 #include <linux/cgroupstats.h>
 #include <linux/hash.h>
 #include <linux/namei.h>
+#include <linux/capability.h>
 
 #include <asm/atomic.h>
 
