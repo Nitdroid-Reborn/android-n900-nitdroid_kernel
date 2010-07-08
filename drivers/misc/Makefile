@@ -43,3 +43,4 @@ obj-$(CONFIG_PANIC_INFO_BUFF)	+= panic_info_buff.o
 obj-$(CONFIG_APANIC)            += apanic.o
 obj-$(CONFIG_ANDROID_BINDER_IPC) += binder.o
 obj-$(CONFIG_ANDROID_PMEM)      += pmem.o
+obj-$(CONFIG_ANDROID_LOGGER)    += logger.o
