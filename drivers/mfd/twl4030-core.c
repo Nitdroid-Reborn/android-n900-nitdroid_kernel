@@ -104,6 +104,19 @@
 #define twl_has_usb()	false
 #endif
 
+#if defined(CONFIG_LEDS_TWL4030_VIBRA) || \
+	defined(CONFIG_LEDS_TWL4030_VIBRA_MODULE)
+#define twl_has_vibra()        true
+#else
+#define twl_has_vibra()        false
+#endif
+
+#if defined(CONFIG_TWL4030_WATCHDOG) || \
+	defined(CONFIG_TWL4030_WATCHDOG_MODULE)
+#define twl_has_watchdog()        true
+#else
+#define twl_has_watchdog()        false
+#endif
 
 /* Triton Core internal information (BEGIN) */
 
@@ -349,7 +362,7 @@ EXPORT_SYMBOL(twl4030_i2c_read);
 int twl4030_i2c_write_u8(u8 mod_no, u8 value, u8 reg)
 {
 
-	/* 2 bytes offset 1 contains the data offset 0 is used by i2c_write */
+	/* 2 bytes: offset 1 contains the data, offset 0 is used by i2c_write */
 	u8 temp_buffer[2] = { 0 };
 	/* offset 1 contains the data */
 	temp_buffer[1] = value;
@@ -529,6 +542,18 @@ add_children(struct twl4030_platform_data *pdata, unsigned long features)
 
 		/* we need to connect regulators to this transceiver */
 		usb_transceiver = child;
+	}
+
+	if (twl_has_vibra()) {
+		child = add_child(0, "twl4030_vibra", NULL, 0, true, 0, 0);
+		if (IS_ERR(child))
+			return PTR_ERR(child);
+	}
+
+	if (twl_has_watchdog()) {
+		child = add_child(0, "twl4030_wdt", NULL, 0, false, 0, 0);
+		if (IS_ERR(child))
+			return PTR_ERR(child);
 	}
 
 	if (twl_has_regulator()) {
@@ -761,7 +786,7 @@ twl4030_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			twl->client = i2c_new_dummy(client->adapter,
 					twl->address);
 			if (!twl->client) {
-				dev_err(&twl->client->dev,
+				dev_err(&client->dev,
 					"can't attach client %d\n", i);
 				status = -ENOMEM;
 				goto fail;

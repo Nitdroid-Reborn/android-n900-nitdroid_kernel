@@ -64,7 +64,6 @@ struct musb_ep;
 #include "musb_host.h"
 
 
-
 #ifdef CONFIG_USB_MUSB_OTG
 
 #define	is_peripheral_enabled(musb)	((musb)->board_mode != MUSB_HOST)
@@ -109,7 +108,7 @@ struct musb_ep;
 
 extern irqreturn_t musb_g_ep0_irq(struct musb *);
 extern void musb_g_tx(struct musb *, u8);
-extern void musb_g_rx(struct musb *, u8);
+extern void musb_g_rx(struct musb *, u8, bool);
 extern void musb_g_reset(struct musb *);
 extern void musb_g_suspend(struct musb *);
 extern void musb_g_resume(struct musb *);
@@ -271,6 +270,12 @@ struct musb_hw_ep {
 	struct musb_qh		*in_qh;
 	struct musb_qh		*out_qh;
 
+	/* list of rx and tx qhs, control transfer needs only
+	 * one list thus only in_list is used for control.
+	 */
+	struct list_head        in_list;
+	struct list_head        out_list;
+
 	u8			rx_reinit;
 	u8			tx_reinit;
 #endif
@@ -300,15 +305,62 @@ static inline struct usb_request *next_out_request(struct musb_hw_ep *hw_ep)
 #endif
 }
 
+#define MUSB_MAX_EPS	16
+
+struct musb_ctx {
+	/* common register */
+	u16	intrtxe;
+	u16	intrrxe;
+
+	u8	intrusbe;
+
+	u8	faddr;
+	u8	power;
+
+	u8	frame;
+	u8	index;
+	u8	testmode;
+	u8	devctl;
+	u8	misc;
+
+	/* indexed registers */
+	u16	txmaxp[MUSB_MAX_EPS];
+	u16	txcsr[MUSB_MAX_EPS];
+
+	u16	rxmaxp[MUSB_MAX_EPS];
+	u16	rxcsr[MUSB_MAX_EPS];
+
+	u16	csr0;		/* select ep0 to read/write this register */
+
+	u8	txtype[MUSB_MAX_EPS];
+	u8	txinterval[MUSB_MAX_EPS];
+
+	u8	rxtype[MUSB_MAX_EPS];
+	u8	rxinterval[MUSB_MAX_EPS];
+
+	u8	fifosize[MUSB_MAX_EPS];
+
+	u8	rxfifosz[MUSB_MAX_EPS];
+	u8	txfifosz[MUSB_MAX_EPS];
+	u16	txfifoadd[MUSB_MAX_EPS];
+	u16	rxfifoadd[MUSB_MAX_EPS];
+
+	u8	count0;
+	u8	type0;
+	u8	naklimit0;
+};
+
 /*
  * struct musb - Driver instance data.
  */
 struct musb {
 	/* device lock */
 	spinlock_t		lock;
+	struct mutex		mutex;
 	struct clk		*clock;
 	irqreturn_t		(*isr)(int, void *);
 	struct work_struct	irq_work;
+	struct work_struct	vbus_work;
 
 /* this hub status bit is reserved by USB 2.0 and not seen by usbcore */
 #define MUSB_PORT_STAT_RESUME	(1 << 31)
@@ -328,9 +380,6 @@ struct musb {
 	 */
 	struct musb_hw_ep	*bulk_ep;
 
-	struct list_head	control;	/* of musb_qh */
-	struct list_head	in_bulk;	/* of musb_qh */
-	struct list_head	out_bulk;	/* of musb_qh */
 	struct musb_qh		*periodic[32];	/* tree of interrupt+iso */
 #endif
 
@@ -356,7 +405,7 @@ struct musb {
 	u16			int_rx;
 	u16			int_tx;
 
-	struct otg_transceiver	xceiv;
+	struct otg_transceiver	*xceiv;
 
 	int nIrq;
 	unsigned		irq_wake:1;
@@ -369,12 +418,15 @@ struct musb {
 	u16 epmask;
 	u8 nr_endpoints;
 
+	struct musb_board_data	*board;
 	u8 board_mode;		/* enum musb_mode */
 	int			(*board_set_power)(int state);
 
 	int			(*set_clock)(struct clk *clk, int is_active);
 
 	u8			min_power;	/* vbus for periph, in mA/2 */
+
+	unsigned		power_draw;	/* current power draw, gadget only */
 
 	bool			is_host;
 
@@ -429,11 +481,18 @@ struct musb {
 	struct usb_gadget_driver *gadget_driver;	/* its driver */
 #endif
 
+	/* true if this chip can enable SUSPENDM */
+	unsigned		suspendm:1;
+
+	/* true if we're using dma */
+	unsigned		use_dma:1;
+
 	struct musb_hdrc_config	*config;
 
 #ifdef MUSB_CONFIG_PROC_FS
 	struct proc_dir_entry *proc_entry;
 #endif
+	unsigned		is_charger:1;
 };
 
 static inline void musb_set_vbus(struct musb *musb, int is_on)
@@ -547,7 +606,37 @@ extern int musb_platform_get_vbus_status(struct musb *musb);
 #define musb_platform_get_vbus_status(x)	0
 #endif
 
+#ifdef CONFIG_PM
+extern void musb_save_ctx(struct musb *musb);
+extern void musb_restore_ctx(struct musb *musb);
+extern void musb_save_ctx_and_suspend(struct usb_gadget *, int);
+extern void musb_restore_ctx_and_resume(struct usb_gadget *);
+#else
+static inline void musb_save_ctx(struct musb *musb) {}
+static inline void musb_restore_ctx(struct musb *musb) {}
+static inline void musb_save_ctx_and_suspend(struct usb_gadget *, int) {}
+static inline void musb_restore_ctx_and_resume(struct usb_gadget *) {}
+#endif
+
 extern int __init musb_platform_init(struct musb *musb);
 extern int musb_platform_exit(struct musb *musb);
+
+/*-------------------------- ProcFS definitions ---------------------*/
+
+struct proc_dir_entry;
+
+#ifdef CONFIG_MUSB_PROC_FS
+extern struct proc_dir_entry *musb_debug_create(char *name, struct musb *data);
+extern void musb_debug_delete(char *name, struct musb *data);
+#else
+static inline struct proc_dir_entry *
+musb_debug_create(char *name, struct musb *data)
+{
+	return NULL;
+}
+static inline void musb_debug_delete(char *name, struct musb *data)
+{
+}
+#endif
 
 #endif	/* __MUSB_CORE_H__ */

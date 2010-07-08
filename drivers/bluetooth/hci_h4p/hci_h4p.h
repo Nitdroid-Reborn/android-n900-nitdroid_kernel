@@ -1,7 +1,7 @@
 /*
  * This file is part of hci_h4p bluetooth driver
  *
- * Copyright (C) 2005, 2006 Nokia Corporation.
+ * Copyright (C) 2005-2008 Nokia Corporation.
  *
  * Contact: Ville Tervo <ville.tervo@nokia.com>
  *
@@ -36,6 +36,13 @@
 #define UART_OMAP_SCR_WAKEUP	0x10
 #define UART_OMAP_SSR_WAKEUP	0x02
 #define UART_OMAP_SSR_TXFULL	0x01
+
+#define UART_OMAP_SYSC_IDLEMODE		0x03
+#define UART_OMAP_SYSC_IDLEMASK		(3 << UART_OMAP_SYSC_IDLEMODE)
+
+#define UART_OMAP_SYSC_FORCE_IDLE	(0 << UART_OMAP_SYSC_IDLEMODE)
+#define UART_OMAP_SYSC_NO_IDLE		(1 << UART_OMAP_SYSC_IDLEMODE)
+#define UART_OMAP_SYSC_SMART_IDLE	(2 << UART_OMAP_SYSC_IDLEMODE)
 
 #if 0
 #define NBT_DBG(fmt, arg...)  printk("%s: " fmt "" , __FUNCTION__ , ## arg)
@@ -74,6 +81,7 @@
 #endif
 
 struct hci_h4p_info {
+	struct timer_list lazy_release;
 	struct hci_dev *hdev;
 	spinlock_t lock;
 
@@ -81,13 +89,11 @@ struct hci_h4p_info {
 	unsigned long uart_phys_base;
 	int irq;
 	struct device *dev;
-	u8 bdaddr[6];
 	u8 chip_type;
 	u8 bt_wakeup_gpio;
 	u8 host_wakeup_gpio;
 	u8 reset_gpio;
 	u8 bt_sysclk;
-
 
 	struct sk_buff_head fw_queue;
 	struct sk_buff *alive_cmd_skb;
@@ -97,26 +103,34 @@ struct hci_h4p_info {
 	int init_error;
 
 	struct sk_buff_head txq;
-	struct tasklet_struct tx_task;
 
 	struct sk_buff *rx_skb;
 	long rx_count;
 	unsigned long rx_state;
 	unsigned long garbage_bytes;
-	struct tasklet_struct rx_task;
 
 	int pm_enabled;
-	int tx_pm_enabled;
-	int rx_pm_enabled;
-	struct timer_list tx_pm_timer;
-	struct timer_list rx_pm_timer;
+	int tx_enabled;
+	int autorts;
+	int rx_enabled;
 
 	int tx_clocks_en;
 	int rx_clocks_en;
 	spinlock_t clocks_lock;
 	struct clk *uart_iclk;
 	struct clk *uart_fclk;
+	atomic_t clk_users;
+	u16 dll;
+	u16 dlh;
+	u16 ier;
+	u16 mdr1;
+	u16 efr;
 };
+
+struct hci_h4p_radio_hdr {
+	__u8 evt;
+	__u8 dlen;
+} __attribute__ ((packed));
 
 #define MAX_BAUD_RATE		921600
 #define BC4_MAX_BAUD_RATE	3692300
@@ -127,6 +141,7 @@ struct hci_h4p_info {
 #define INIT_SPEED		120000
 
 #define H4_TYPE_SIZE		1
+#define H4_RADIO_HDR_SIZE	2
 
 /* H4+ packet types */
 #define H4_CMD_PKT		0x01
@@ -135,6 +150,7 @@ struct hci_h4p_info {
 #define H4_EVT_PKT		0x04
 #define H4_NEG_PKT		0x06
 #define H4_ALIVE_PKT		0x07
+#define H4_RADIO_PKT		0x08
 
 /* TX states */
 #define WAIT_FOR_PKT_TYPE	1
@@ -154,6 +170,11 @@ struct hci_bc4_set_bdaddr {
 
 int hci_h4p_send_alive_packet(struct hci_h4p_info *info);
 
+void hci_h4p_bcm_parse_fw_event(struct hci_h4p_info *info,
+				struct sk_buff *skb);
+int hci_h4p_bcm_send_fw(struct hci_h4p_info *info,
+			struct sk_buff_head *fw_queue);
+
 void hci_h4p_bc4_parse_fw_event(struct hci_h4p_info *info,
 				struct sk_buff *skb);
 int hci_h4p_bc4_send_fw(struct hci_h4p_info *info,
@@ -169,6 +190,7 @@ int hci_h4p_send_fw(struct hci_h4p_info *info, struct sk_buff_head *fw_queue);
 void hci_h4p_parse_fw_event(struct hci_h4p_info *info, struct sk_buff *skb);
 
 int hci_h4p_sysfs_create_files(struct device *dev);
+void hci_h4p_sysfs_remove_files(struct device *dev);
 
 void hci_h4p_outb(struct hci_h4p_info *info, unsigned int offset, u8 val);
 u8 hci_h4p_inb(struct hci_h4p_info *info, unsigned int offset);
@@ -178,6 +200,10 @@ void __hci_h4p_set_auto_ctsrts(struct hci_h4p_info *info, int on, u8 which);
 void hci_h4p_set_auto_ctsrts(struct hci_h4p_info *info, int on, u8 which);
 void hci_h4p_change_speed(struct hci_h4p_info *info, unsigned long speed);
 int hci_h4p_reset_uart(struct hci_h4p_info *info);
-int hci_h4p_init_uart(struct hci_h4p_info *info);
+void hci_h4p_init_uart(struct hci_h4p_info *info);
+void hci_h4p_enable_tx(struct hci_h4p_info *info);
+void hci_h4p_store_regs(struct hci_h4p_info *info);
+void hci_h4p_restore_regs(struct hci_h4p_info *info);
+void hci_h4p_smart_idle(struct hci_h4p_info *info, bool enable);
 
 #endif /* __DRIVERS_BLUETOOTH_HCI_H4P_H */

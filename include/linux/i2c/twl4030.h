@@ -83,6 +83,15 @@ int twl4030_i2c_read(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes);
 
 /*----------------------------------------------------------------------*/
 
+/* Update USB suspended state flag for twl4030-poweroff driver */
+#if defined(CONFIG_TWL4030_POWEROFF)
+extern void twl4030_upd_usb_suspended(u8 suspended);
+#else
+#define twl4030_upd_usb_suspended(susp) do { } while (0)
+#endif
+
+/*----------------------------------------------------------------------*/
+
 /*
  * NOTE:  at up to 1024 registers, this is a big chip.
  *
@@ -243,6 +252,37 @@ int twl4030_i2c_read(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes);
 #define RES_STATE_SLEEP		0x8
 #define RES_STATE_OFF		0x0
 
+/* Power resources */
+
+#define RES_VAUX1		1
+#define RES_VAUX2		2
+#define RES_VAUX3		3
+#define RES_VAUX4		4
+#define RES_VMMC1		5
+#define RES_VMMC2		6
+#define RES_VPLL1		7
+#define RES_VPLL2		8
+#define RES_VSIM		9
+#define RES_VDAC		10
+#define RES_VINTANA1		11
+#define RES_VINTANA2		12
+#define RES_VINTDIG		13
+#define RES_VIO			14
+#define RES_VDD1		15
+#define RES_VDD2		16
+#define RES_VUSB_1v5		17
+#define RES_VUSB_1v8		18
+#define RES_VUSB_3v1		19
+#define RES_VUSBCP		20
+#define RES_REGEN		21
+#define RES_NRES_PWRON		22
+#define RES_CLKEN		23
+#define RES_SYSEN		24
+#define RES_HFCLKOUT		25
+#define RES_32KCLKOUT		26
+#define RES_RESET		27
+#define RES_Main_Ref		28
+
 /*
  * Power Bus Message Format ... these can be sent individually by Linux,
  * but are usually part of downloaded scripts that are run when various
@@ -262,6 +302,7 @@ int twl4030_i2c_read(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes);
 
 #define MSG_SINGULAR(devgrp, id, state) \
 	((devgrp) << 13 | 0 << 12 | (id) << 4 | (state))
+
 
 /*----------------------------------------------------------------------*/
 
@@ -324,19 +365,40 @@ struct twl4030_ins {
 	u8 delay;
 };
 
+#define MAX_EVENTS 4
+
+enum twl4030_event {
+	TRITON_SLEEP 	= 1,
+	TRITON_WAKEUP12 = 2,
+	TRITON_WAKEUP3  = 3,
+	TRITON_WRST 	= 4,
+};
+
+struct twl4030_script_event {
+	/* offset from the start of the script allow overlapping */
+	u8 offset;
+	enum twl4030_event event;
+};
+
 struct twl4030_script {
 	struct twl4030_ins *script;
 	unsigned size;
-	u8 flags;
-#define TRITON_WRST_SCRIPT	(1<<0)
-#define TRITON_WAKEUP12_SCRIPT	(1<<1)
-#define TRITON_WAKEUP3_SCRIPT	(1<<2)
-#define TRITON_SLEEP_SCRIPT	(1<<3)
+	unsigned number_of_events;
+	struct twl4030_script_event events[MAX_EVENTS];
+};
+
+struct twl4030_resconfig {
+	int resource;
+	int devgroup;
+	int type;
+	int type2;
+	int remap;
 };
 
 struct twl4030_power_data {
 	struct twl4030_script **scripts;
-	unsigned size;
+	unsigned scripts_size;
+	struct twl4030_resconfig *resource_config;
 };
 
 struct twl4030_platform_data {
@@ -371,11 +433,25 @@ int twl4030_sih_setup(int module);
 #define TWL4030_VDAC_DEV_GRP		0x3B
 #define TWL4030_VDAC_DEDICATED		0x3E
 #define TWL4030_VAUX1_DEV_GRP		0x17
+#define TWL4030_VAUX1_TYPE		0x18
+#define TWL4030_VAUX1_REMAP		0x19
 #define TWL4030_VAUX1_DEDICATED		0x1A
 #define TWL4030_VAUX2_DEV_GRP		0x1B
+#define TWL4030_VAUX2_TYPE		0x1C
+#define TWL4030_VAUX2_REMAP		0x1D
 #define TWL4030_VAUX2_DEDICATED		0x1E
 #define TWL4030_VAUX3_DEV_GRP		0x1F
+#define TWL4030_VAUX3_TYPE		0x20
+#define TWL4030_VAUX3_REMAP		0x21
 #define TWL4030_VAUX3_DEDICATED		0x22
+#define TWL4030_VAUX4_DEV_GRP		0x23
+#define TWL4030_VAUX4_TYPE		0x24
+#define TWL4030_VAUX4_REMAP		0x25
+#define TWL4030_VAUX4_DEDICATED		0x26
+#define TWL4030_VMMC2_DEV_GRP		0x2b
+#define TWL4030_VMMC2_TYPE		0x2c
+#define TWL4030_VMMC2_REMAP		0x2d
+#define TWL4030_VMMC2_DEDICATED		0x2e
 
 #if defined(CONFIG_TWL4030_BCI_BATTERY) || \
 	defined(CONFIG_TWL4030_BCI_BATTERY_MODULE)
@@ -418,4 +494,6 @@ int twl4030_sih_setup(int module);
 #define TWL4030_REG_VUSB1V8	18
 #define TWL4030_REG_VUSB3V1	19
 
+extern int twl4030_enable_regulator(int res);
+extern int twl4030_disable_regulator(int res);
 #endif /* End of __TWL4030_H */

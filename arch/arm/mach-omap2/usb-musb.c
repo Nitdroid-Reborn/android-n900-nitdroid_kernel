@@ -32,6 +32,13 @@
 #include <mach/mux.h>
 #include <mach/usb.h>
 
+#define SIDLEMODE	3
+#define SMARTIDLE	(2 << SIDLEMODE)
+#define AUTOIDLE        (1 << 0)
+#define FORCESTDBY	(1 << 0)
+#define OTG_SYSCONFIG	(OMAP34XX_HSUSB_OTG_BASE + 0x404)
+#define OTG_FORCESTDBY	(OMAP34XX_HSUSB_OTG_BASE + 0x414)
+
 #ifdef CONFIG_USB_MUSB_SOC
 static struct resource musb_resources[] = {
 	[0] = {
@@ -156,12 +163,21 @@ static struct platform_device musb_device = {
 #endif
 
 
-void __init usb_musb_init(void)
+void __init usb_musb_init(struct musb_board_data *board)
 {
+	musb_plat.board = board;
+
 #ifdef CONFIG_USB_MUSB_SOC
 	if (platform_device_register(&musb_device) < 0) {
 		printk(KERN_ERR "Unable to register HS-USB (MUSB) device\n");
 		return;
+	}
+#endif
+#if !defined(CONFIG_USB) || defined(CONFIG_USB_MODULE)
+	/* Force MUSB to standby if not used */
+	if (cpu_is_omap34xx()) {
+		omap_writel(AUTOIDLE, OTG_SYSCONFIG);
+		omap_writel(FORCESTDBY, OTG_FORCESTDBY);
 	}
 #endif
 }

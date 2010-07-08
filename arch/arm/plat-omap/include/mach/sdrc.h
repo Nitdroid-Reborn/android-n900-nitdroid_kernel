@@ -31,14 +31,18 @@
 #define SDRC_POWER		0x070
 #define SDRC_MCFG_0		0x080
 #define SDRC_MR_0		0x084
+#define SDRC_EMR2_0		0x08c
 #define SDRC_ACTIM_CTRL_A_0	0x09c
 #define SDRC_ACTIM_CTRL_B_0	0x0a0
 #define SDRC_RFR_CTRL_0		0x0a4
+#define SDRC_MANUAL_0		0x0a8
 #define SDRC_MCFG_1		0x0B0
 #define SDRC_MR_1		0x0B4
+#define SDRC_EMR2_1		0x0BC
 #define SDRC_ACTIM_CTRL_A_1	0x0C4
 #define SDRC_ACTIM_CTRL_B_1	0x0C8
 #define SDRC_RFR_CTRL_1		0x0D4
+#define SDRC_MANUAL_1		0x0D8
 
 /*
  * These values represent the number of memory clock cycles between
@@ -70,6 +74,12 @@
 #define SDRC_RFR_CTRL_110MHz	(0x0002da01 | 1) /* Need to calc */
 #define SDRC_RFR_CTRL_BYPASS	(0x00005000 | 1) /* Need to calc */
 
+/* SDRC POWER regbits */
+#define SDRC_POWER_AUTOCOUNT_SHIFT 8
+#define SDRC_POWER_AUTOCOUNT_MASK (0xffff << SDRC_POWER_AUTOCOUNT_SHIFT)
+#define SDRC_POWER_CLKCTRL_SHIFT 4
+#define SDRC_POWER_CLKCTRL_MASK (0x3 << SDRC_POWER_CLKCTRL_SHIFT)
+#define SDRC_SELF_REFRESH_ON_AUTOCOUNT (0x2 << SDRC_POWER_CLKCTRL_SHIFT)
 
 /*
  * SMS register access
@@ -108,9 +118,13 @@ struct omap_sdrc_params {
 	u32 mr;
 };
 
-void __init omap2_sdrc_init(struct omap_sdrc_params *);
-struct omap_sdrc_params *omap2_sdrc_get_params(unsigned long r);
-
+void omap2_sms_save_context(void);
+void omap2_sms_restore_context(void);
+void __init omap2_sdrc_init(struct omap_sdrc_params *sdrc_cs0,
+			    struct omap_sdrc_params *sdrc_cs1);
+int omap2_sdrc_get_params(unsigned long r,
+			  struct omap_sdrc_params **sdrc_cs0,
+			  struct omap_sdrc_params **sdrc_cs1);
 #ifdef CONFIG_ARCH_OMAP2
 
 struct memory_timings {

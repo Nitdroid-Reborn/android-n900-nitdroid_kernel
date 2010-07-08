@@ -144,6 +144,7 @@
 #define OMAP_DMA4_CSSA_U(n)		0
 #define OMAP_DMA4_CDSA_L(n)		0
 #define OMAP_DMA4_CDSA_U(n)		0
+#define OMAP1_DMA_COLOR(n)		0
 
 /*----------------------------------------------------------------------------*/
 
@@ -542,6 +543,11 @@ extern int omap_dma_set_prio_lch(int lch, unsigned char read_prio,
 extern void omap_set_dma_dst_endian_type(int lch, enum end_type etype);
 extern void omap_set_dma_src_endian_type(int lch, enum end_type etype);
 extern int omap_get_dma_index(int lch, int *ei, int *fi);
+
+void omap_dma_global_context_save(void);
+void omap_dma_global_context_restore(void);
+
+extern void omap_dma_disable_irq(int lch);
 
 /* Chaining APIs */
 #ifndef CONFIG_ARCH_OMAP1

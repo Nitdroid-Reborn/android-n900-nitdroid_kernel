@@ -37,6 +37,8 @@ struct gpio_switch {
 	u16		debounce_rising;
 	u16		debounce_falling;
 
+	int		disabled;
+
 	void (* notify)(void *data, int state);
 	void *notify_data;
 
@@ -151,6 +153,8 @@ static ssize_t gpio_sw_state_show(struct device *dev,
 	struct gpio_switch *sw = dev_get_drvdata(dev);
 	const char **str;
 
+	if (sw->disabled)
+		sw->state = gpio_sw_get_state(sw);
 	str = get_sw_str(sw);
 	return sprintf(buf, "%s\n", str[sw->state]);
 }
@@ -182,6 +186,42 @@ static ssize_t gpio_sw_direction_show(struct device *dev,
 
 static DEVICE_ATTR(direction, S_IRUGO, gpio_sw_direction_show, NULL);
 
+static ssize_t gpio_sw_disable_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf,
+				   size_t count)
+{
+	struct gpio_switch *sw = dev_get_drvdata(dev);
+	unsigned long res;
+
+	if (strict_strtoul(buf, 10, &res) < 0)
+		return -EINVAL;
+
+	if (!!res == sw->disabled)
+		goto out;
+	sw->disabled = !!res;
+
+	if (res) {
+		disable_irq(gpio_to_irq(sw->gpio));
+	} else {
+		sw->state = gpio_sw_get_state(sw);
+		enable_irq(gpio_to_irq(sw->gpio));
+	}
+out:
+	return count;
+}
+
+static ssize_t gpio_sw_disable_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct gpio_switch *sw = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%u\n", sw->disabled);
+}
+
+static DEVICE_ATTR(disable, S_IRUGO | S_IWUSR, gpio_sw_disable_show,
+		   gpio_sw_disable_store);
 
 static irqreturn_t gpio_sw_irq_handler(int irq, void *arg)
 {
@@ -286,17 +326,24 @@ static int __init new_switch(struct gpio_switch *sw)
 
 	/* input: 1, output: 0 */
 	direction = !(sw->flags & OMAP_GPIO_SWITCH_FLAG_OUTPUT);
-	if (direction)
+	if (direction) {
 		gpio_direction_input(sw->gpio);
-	else
-		gpio_direction_output(sw->gpio, true);
+		sw->state = gpio_sw_get_state(sw);
+	} else {
+		int state = sw->state = !!(sw->flags &
+			OMAP_GPIO_SWITCH_FLAG_OUTPUT_INIT_ACTIVE);
 
-	sw->state = gpio_sw_get_state(sw);
+		if (sw->flags & OMAP_GPIO_SWITCH_FLAG_INVERTED)
+			state = !state;
+		gpio_direction_output(sw->gpio, state);
+	}
 
 	r = 0;
 	r |= device_create_file(&sw->pdev.dev, &dev_attr_state);
 	r |= device_create_file(&sw->pdev.dev, &dev_attr_type);
 	r |= device_create_file(&sw->pdev.dev, &dev_attr_direction);
+	if (direction)
+		r |= device_create_file(&sw->pdev.dev, &dev_attr_disable);
 	if (r)
 		printk(KERN_ERR "gpio-switch: attribute file creation "
 		       "failed for %s\n", sw->name);
@@ -453,6 +500,9 @@ static void gpio_sw_cleanup(void)
 		device_remove_file(&sw->pdev.dev, &dev_attr_state);
 		device_remove_file(&sw->pdev.dev, &dev_attr_type);
 		device_remove_file(&sw->pdev.dev, &dev_attr_direction);
+
+		if (!(sw->flags & OMAP_GPIO_SWITCH_FLAG_OUTPUT))
+			device_remove_file(&sw->pdev.dev, &dev_attr_disable);
 
 		platform_device_unregister(&sw->pdev);
 		gpio_free(sw->gpio);

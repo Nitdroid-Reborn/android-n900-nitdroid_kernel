@@ -48,6 +48,7 @@ struct twl4030_madc_data {
 };
 
 static struct twl4030_madc_data *the_madc;
+static int twl4030_madc_set_current_generator(struct twl4030_madc_data *madc, int chan, int on);
 
 static
 const struct twl4030_madc_conversion_method twl4030_conversion_methods[] = {
@@ -246,39 +247,50 @@ static inline void twl4030_madc_start_conversion(struct twl4030_madc_data *madc,
 	}
 }
 
-static void twl4030_madc_wait_conversion_ready_ms(
+static int twl4030_madc_wait_conversion_ready(
 		struct twl4030_madc_data *madc,
-		u8 *time, u8 status_reg)
+		unsigned int timeout_ms, u8 status_reg)
 {
-	u8 reg = 0;
+	unsigned long timeout;
 
+	timeout = jiffies + msecs_to_jiffies(timeout_ms);
 	do {
-		msleep(1);
-		(*time)--;
+		int reg;
+
 		reg = twl4030_madc_read(madc, status_reg);
-	} while (((reg & TWL4030_MADC_BUSY) && !(reg & TWL4030_MADC_EOC_SW)) &&
-		  (*time != 0));
+		if (unlikely(reg < 0))
+			return reg;
+		if (!(reg & TWL4030_MADC_BUSY) && (reg & TWL4030_MADC_EOC_SW))
+			return 0;
+	} while (!time_after(jiffies, timeout));
+
+	return -EAGAIN;
 }
 
+static int twl4030_madc_set_power(struct twl4030_madc_data *madc, int on);
 int twl4030_madc_conversion(struct twl4030_madc_request *req)
 {
 	const struct twl4030_madc_conversion_method *method;
-	u8 wait_time, ch_msb, ch_lsb;
+	u8 ch_msb, ch_lsb;
 	int ret;
 
 	if (unlikely(!req))
 		return -EINVAL;
 
+	mutex_lock(&the_madc->lock);
+
+	twl4030_madc_set_power(the_madc, 1);
+
 	/* Do we have a conversion request ongoing */
-	if (the_madc->requests[req->method].active)
-		return -EBUSY;
+	if (the_madc->requests[req->method].active) {
+		ret = -EBUSY;
+		goto out;
+	}
 
 	ch_msb = (req->channels >> 8) & 0xff;
 	ch_lsb = req->channels & 0xff;
 
 	method = &twl4030_conversion_methods[req->method];
-
-	mutex_lock(&the_madc->lock);
 
 	/* Select channels to be converted */
 	twl4030_madc_write(the_madc, method->sel + 1, ch_msb);
@@ -308,12 +320,10 @@ int twl4030_madc_conversion(struct twl4030_madc_request *req)
 	the_madc->requests[req->method].active = 1;
 
 	/* Wait until conversion is ready (ctrl register returns EOC) */
-	wait_time = 50;
-	twl4030_madc_wait_conversion_ready_ms(the_madc,
-			&wait_time, method->ctrl);
-	if (wait_time == 0) {
+	ret = twl4030_madc_wait_conversion_ready(the_madc, 5, method->ctrl);
+	if (ret) {
 		dev_dbg(the_madc->dev, "conversion timeout!\n");
-		ret = -EAGAIN;
+		the_madc->requests[req->method].active = 0;
 		goto out;
 	}
 
@@ -321,6 +331,8 @@ int twl4030_madc_conversion(struct twl4030_madc_request *req)
 					 req->rbuf);
 
 	the_madc->requests[req->method].active = 0;
+
+	twl4030_madc_set_power(the_madc, 0);
 
 out:
 	mutex_unlock(&the_madc->lock);
@@ -342,10 +354,15 @@ static int twl4030_madc_set_current_generator(struct twl4030_madc_data *madc,
 
 	ret = twl4030_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE,
 				  &regval, TWL4030_BCI_BCICTL1);
-	if (on)
+	if (on) {
 		regval |= (chan) ? TWL4030_BCI_ITHEN : TWL4030_BCI_TYPEN;
-	else
+		regval |= TWL4030_BCI_MESBAT;
+	}
+	else {
 		regval &= (chan) ? ~TWL4030_BCI_ITHEN : ~TWL4030_BCI_TYPEN;
+		regval &= ~TWL4030_BCI_MESBAT;
+	}
+
 	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE,
 				   regval, TWL4030_BCI_BCICTL1);
 
@@ -354,20 +371,28 @@ static int twl4030_madc_set_current_generator(struct twl4030_madc_data *madc,
 
 static int twl4030_madc_set_power(struct twl4030_madc_data *madc, int on)
 {
+	int ret = 0;
 	u8 regval;
 
-	regval = twl4030_madc_read(madc, TWL4030_MADC_CTRL1);
-	if (on)
+	if (on) {
+		regval = twl4030_madc_read(madc, TWL4030_MADC_CTRL1);
 		regval |= TWL4030_MADC_MADCON;
-	else
-		regval &= ~TWL4030_MADC_MADCON;
-	twl4030_madc_write(madc, TWL4030_MADC_CTRL1, regval);
+		twl4030_madc_write(madc, TWL4030_MADC_CTRL1, regval);
 
-	return 0;
+		ret |= twl4030_madc_set_current_generator(madc, 0, 1);
+
+	} else {
+		ret |= twl4030_madc_set_current_generator(madc, 0, 0);
+
+		regval = twl4030_madc_read(madc, TWL4030_MADC_CTRL1);
+		regval &= ~TWL4030_MADC_MADCON;
+		twl4030_madc_write(madc, TWL4030_MADC_CTRL1, regval);
+	}
+	return ret;
 }
 
-static int twl4030_madc_ioctl(struct inode *inode, struct file *filp,
-			      unsigned int cmd, unsigned long arg)
+static long twl4030_madc_ioctl(struct file *filp, unsigned int cmd,
+			       unsigned long arg)
 {
 	struct twl4030_madc_user_parms par;
 	int val, ret;
@@ -388,13 +413,16 @@ static int twl4030_madc_ioctl(struct inode *inode, struct file *filp,
 		req.do_avg	= par.average;
 		req.method	= TWL4030_MADC_SW1;
 		req.func_cb	= NULL;
+		req.type	= TWL4030_MADC_WAIT;
 
 		val = twl4030_madc_conversion(&req);
-		if (val <= 0) {
-			par.status = -1;
-		} else {
+		if (likely(val > 0)) {
 			par.status = 0;
 			par.result = (u16)req.rbuf[par.channel];
+		} else if (val == 0) {
+			par.status = -ENODATA;
+		} else {
+			par.status = val;
 		}
 		break;
 					     }
@@ -413,12 +441,12 @@ static int twl4030_madc_ioctl(struct inode *inode, struct file *filp,
 
 static struct file_operations twl4030_madc_fileops = {
 	.owner = THIS_MODULE,
-	.ioctl = twl4030_madc_ioctl
+	.unlocked_ioctl = twl4030_madc_ioctl
 };
 
 static struct miscdevice twl4030_madc_device = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name = "twl4030-madc",
+	.name = "twl4030-adc",
 	.fops = &twl4030_madc_fileops
 };
 
@@ -447,16 +475,6 @@ static int __init twl4030_madc_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "could not register misc_device\n");
 		goto err_misc;
 	}
-	twl4030_madc_set_power(madc, 1);
-	twl4030_madc_set_current_generator(madc, 0, 1);
-
-	ret = twl4030_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE,
-				  &regval, TWL4030_BCI_BCICTL1);
-
-	regval |= TWL4030_BCI_MESBAT;
-
-	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE,
-				   regval, TWL4030_BCI_BCICTL1);
 
 	ret = request_irq(platform_get_irq(pdev, 0), twl4030_madc_irq_handler,
 			  0, "twl4030_madc", madc);
@@ -487,8 +505,6 @@ static int __exit twl4030_madc_remove(struct platform_device *pdev)
 {
 	struct twl4030_madc_data *madc = platform_get_drvdata(pdev);
 
-	twl4030_madc_set_power(madc, 0);
-	twl4030_madc_set_current_generator(madc, 0, 0);
 	free_irq(platform_get_irq(pdev, 0), madc);
 	cancel_work_sync(&madc->ws);
 	misc_deregister(&twl4030_madc_device);

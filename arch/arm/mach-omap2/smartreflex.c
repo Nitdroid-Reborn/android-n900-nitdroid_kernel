@@ -26,18 +26,52 @@
 #include <linux/kobject.h>
 #include <linux/i2c/twl4030.h>
 #include <linux/io.h>
+#include "resource34xx_mutex.h"
 
 #include <mach/omap34xx.h>
 #include <mach/control.h>
 #include <mach/clock.h>
+#include <mach/omap-pm.h>
+#include <mach/resource.h>
 
 #include "prm.h"
 #include "smartreflex.h"
 #include "prm-regbits-34xx.h"
 
-/* XXX: These should be relocated where-ever the OPP implementation will be */
-u32 current_vdd1_opp;
-u32 current_vdd2_opp;
+/*
+ * VP_TRANXDONE_TIMEOUT: maximum microseconds to wait for the VP to
+ * indicate that any pending transactions are complete.  [The current
+ * 62 microsecond timeout was measured empirically by Nishanth Menon
+ * during an overnight run; its granularity is ~ 30.5 microseconds, since
+ * it was measured with the 32KiHz sync timer; see bug 133793]
+ */
+#define VP_TRANXDONE_TIMEOUT	62
+
+/*
+ * VP_IDLE_TIMEOUT: maximum microseconds to wait for the VP to enter
+ * IDLE.  [The current 3.472 millisecond timeout was measured
+ * empirically by Nishanth Menon during an overnight run; its
+ * granularity is ~ 30.5 microseconds, since it was measured with the
+ * 32KiHz sync timer; see bug 133793]
+ */
+#define VP_IDLE_TIMEOUT		3472
+
+/*
+ * SR_DISABLE_TIMEOUT: maximum microseconds to wait for the SR to
+ * disable.  [The current 3.472 millisecond timeout was measured
+ * empirically by Nishanth Menon during an overnight run; its
+ * granularity is ~ 30.5 microseconds, since it was measured with the
+ * 32KiHz sync timer; see bug 133793]
+ */
+#define SR_DISABLE_TIMEOUT	3472
+
+/*
+ * SR_DISABLE_MAX_ATTEMPTS: arbitrary value intended to avoid system
+ * crashes if the SR disable process fails the first few times.  The
+ * kernel will WARN() for every timeout, but will BUG() after
+ * SR_DISABLE_MAX_ATTEMPTS.
+ */
+#define SR_DISABLE_MAX_ATTEMPTS 4
 
 struct omap_sr {
 	int		srid;
@@ -85,8 +119,8 @@ static int sr_clk_enable(struct omap_sr *sr)
 	}
 
 	/* set fclk- active , iclk- idle */
-	sr_modify_reg(sr, ERRCONFIG, SR_CLKACTIVITY_MASK,
-		      SR_CLKACTIVITY_IOFF_FON);
+	sr_modify_reg(sr, ERRCONFIG, SR_CLKACTIVITY_MASK |
+		ERRCONFIG_INTERRUPT_STATUS_MASK, SR_CLKACTIVITY_IOFF_FON);
 
 	return 0;
 }
@@ -94,8 +128,8 @@ static int sr_clk_enable(struct omap_sr *sr)
 static void sr_clk_disable(struct omap_sr *sr)
 {
 	/* set fclk, iclk- idle */
-	sr_modify_reg(sr, ERRCONFIG, SR_CLKACTIVITY_MASK,
-		      SR_CLKACTIVITY_IOFF_FOFF);
+	sr_modify_reg(sr, ERRCONFIG, SR_CLKACTIVITY_MASK |
+		ERRCONFIG_INTERRUPT_STATUS_MASK, SR_CLKACTIVITY_IOFF_FOFF);
 
 	clk_disable(sr->clk);
 	sr->is_sr_reset = 1;
@@ -148,14 +182,14 @@ static u32 cal_test_nvalue(u32 sennval, u32 senpval)
 
 static void sr_set_clk_length(struct omap_sr *sr)
 {
-	struct clk *osc_sys_ck;
-	u32 sys_clk = 0;
+	struct clk *sys_ck;
+	u32 sys_clk_speed;
 
-	osc_sys_ck = clk_get(NULL, "osc_sys_ck");
-	sys_clk = clk_get_rate(osc_sys_ck);
-	clk_put(osc_sys_ck);
+	sys_ck = clk_get(NULL, "sys_ck");
+	sys_clk_speed = clk_get_rate(sys_ck);
+	clk_put(sys_ck);
 
-	switch (sys_clk) {
+	switch (sys_clk_speed) {
 	case 12000000:
 		sr->clk_length = SRCLKLENGTH_12MHZ_SYSCLK;
 		break;
@@ -172,7 +206,7 @@ static void sr_set_clk_length(struct omap_sr *sr)
 		sr->clk_length = SRCLKLENGTH_38MHZ_SYSCLK;
 		break;
 	default :
-		printk(KERN_ERR "Invalid sysclk value: %d\n", sys_clk);
+		printk(KERN_ERR "Invalid sysclk value: %d\n", sys_clk_speed);
 		break;
 	}
 }
@@ -183,7 +217,6 @@ static void sr_set_efuse_nvalues(struct omap_sr *sr)
 		sr->senn_mod = (omap_ctrl_readl(OMAP343X_CONTROL_FUSE_SR) &
 					OMAP343X_SR1_SENNENABLE_MASK) >>
 					OMAP343X_SR1_SENNENABLE_SHIFT;
-
 		sr->senp_mod = (omap_ctrl_readl(OMAP343X_CONTROL_FUSE_SR) &
 					OMAP343X_SR1_SENPENABLE_MASK) >>
 					OMAP343X_SR1_SENPENABLE_SHIFT;
@@ -251,11 +284,19 @@ static void sr_set_nvalues(struct omap_sr *sr)
 static void sr_configure_vp(int srid)
 {
 	u32 vpconfig;
+	u8 curr_opp_no;
 
 	if (srid == SR1) {
-		vpconfig = PRM_VP1_CONFIG_ERROROFFSET | PRM_VP1_CONFIG_ERRORGAIN
-					| PRM_VP1_CONFIG_INITVOLTAGE
-					| PRM_VP1_CONFIG_TIMEOUTEN;
+		curr_opp_no = resource_get_level("vdd1_opp");
+
+		vpconfig = PRM_VP1_CONFIG_ERROROFFSET |
+			PRM_VP1_CONFIG_TIMEOUTEN |
+			mpu_opps[curr_opp_no].vsel <<
+			OMAP3430_INITVOLTAGE_SHIFT;
+
+		vpconfig |= (curr_opp_no > SR_MAX_LOW_OPP) ?
+			PRM_VP1_CONFIG_ERRORGAIN_HIGHOPP :
+			PRM_VP1_CONFIG_ERRORGAIN_LOWOPP;
 
 		prm_write_mod_reg(vpconfig, OMAP3430_GR_MOD,
 					OMAP3_PRM_VP1_CONFIG_OFFSET);
@@ -277,15 +318,30 @@ static void sr_configure_vp(int srid)
 
 		/* Trigger initVDD value copy to voltage processor */
 		prm_set_mod_reg_bits(PRM_VP1_CONFIG_INITVDD, OMAP3430_GR_MOD,
-					OMAP3_PRM_VP1_CONFIG_OFFSET);
+				     OMAP3_PRM_VP1_CONFIG_OFFSET);
+
 		/* Clear initVDD copy trigger bit */
 		prm_clear_mod_reg_bits(PRM_VP1_CONFIG_INITVDD, OMAP3430_GR_MOD,
-					OMAP3_PRM_VP1_CONFIG_OFFSET);
+				       OMAP3_PRM_VP1_CONFIG_OFFSET);
+
+		/* Force update of voltage */
+		prm_set_mod_reg_bits(OMAP3430_FORCEUPDATE, OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP1_CONFIG_OFFSET);
+		/* Clear force bit */
+		prm_clear_mod_reg_bits(OMAP3430_FORCEUPDATE, OMAP3430_GR_MOD,
+				       OMAP3_PRM_VP1_CONFIG_OFFSET);
 
 	} else if (srid == SR2) {
-		vpconfig = PRM_VP2_CONFIG_ERROROFFSET | PRM_VP2_CONFIG_ERRORGAIN
-					| PRM_VP2_CONFIG_INITVOLTAGE
-					| PRM_VP2_CONFIG_TIMEOUTEN;
+		curr_opp_no = resource_get_level("vdd2_opp");
+
+		vpconfig = PRM_VP2_CONFIG_ERROROFFSET |
+			PRM_VP2_CONFIG_TIMEOUTEN |
+			l3_opps[curr_opp_no].vsel <<
+			OMAP3430_INITVOLTAGE_SHIFT;
+
+		vpconfig |= (curr_opp_no > SR_MAX_LOW_OPP) ?
+			PRM_VP2_CONFIG_ERRORGAIN_HIGHOPP :
+			PRM_VP2_CONFIG_ERRORGAIN_LOWOPP;
 
 		prm_write_mod_reg(vpconfig, OMAP3430_GR_MOD,
 					OMAP3_PRM_VP2_CONFIG_OFFSET);
@@ -306,11 +362,19 @@ static void sr_configure_vp(int srid)
 					OMAP3_PRM_VP2_VLIMITTO_OFFSET);
 
 		/* Trigger initVDD value copy to voltage processor */
-		prm_set_mod_reg_bits(PRM_VP2_CONFIG_INITVDD, OMAP3430_GR_MOD,
-					OMAP3_PRM_VP2_CONFIG_OFFSET);
-		/* Reset initVDD copy trigger bit */
-		prm_clear_mod_reg_bits(PRM_VP2_CONFIG_INITVDD, OMAP3430_GR_MOD,
-					OMAP3_PRM_VP2_CONFIG_OFFSET);
+		prm_set_mod_reg_bits(PRM_VP1_CONFIG_INITVDD, OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP2_CONFIG_OFFSET);
+
+		/* Clear initVDD copy trigger bit */
+		prm_clear_mod_reg_bits(PRM_VP1_CONFIG_INITVDD, OMAP3430_GR_MOD,
+				       OMAP3_PRM_VP2_CONFIG_OFFSET);
+
+		/* Force update of voltage */
+		prm_set_mod_reg_bits(OMAP3430_FORCEUPDATE, OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP2_CONFIG_OFFSET);
+		/* Clear force bit */
+		prm_clear_mod_reg_bits(OMAP3430_FORCEUPDATE, OMAP3430_GR_MOD,
+				       OMAP3_PRM_VP2_CONFIG_OFFSET);
 
 	}
 }
@@ -339,8 +403,8 @@ static void sr_configure(struct omap_sr *sr)
 					SR1_AVGWEIGHT_SENNAVGWEIGHT);
 
 		sr_modify_reg(sr, ERRCONFIG, (SR_ERRWEIGHT_MASK |
-			SR_ERRMAXLIMIT_MASK | SR_ERRMINLIMIT_MASK),
-			(SR1_ERRWEIGHT | SR1_ERRMAXLIMIT | SR1_ERRMINLIMIT));
+			SR_ERRMAXLIMIT_MASK) | ERRCONFIG_INTERRUPT_STATUS_MASK,
+			(SR1_ERRWEIGHT | SR1_ERRMAXLIMIT));
 
 	} else if (sr->srid == SR2) {
 		sr_config = SR2_SRCONFIG_ACCUMDATA |
@@ -355,16 +419,96 @@ static void sr_configure(struct omap_sr *sr)
 		sr_write_reg(sr, AVGWEIGHT, SR2_AVGWEIGHT_SENPAVGWEIGHT |
 					SR2_AVGWEIGHT_SENNAVGWEIGHT);
 		sr_modify_reg(sr, ERRCONFIG, (SR_ERRWEIGHT_MASK |
-			SR_ERRMAXLIMIT_MASK | SR_ERRMINLIMIT_MASK),
-			(SR2_ERRWEIGHT | SR2_ERRMAXLIMIT | SR2_ERRMINLIMIT));
+			SR_ERRMAXLIMIT_MASK) | ERRCONFIG_INTERRUPT_STATUS_MASK,
+			(SR2_ERRWEIGHT | SR2_ERRMAXLIMIT));
 
 	}
 	sr->is_sr_reset = 0;
 }
 
+static int sr_reset_voltage(int srid)
+{
+	u32 target_opp_no, vsel = 0;
+	u32 reg_addr = 0;
+	u32 loop_cnt = 0, retries_cnt = 0;
+	u32 vc_bypass_value;
+	u32 t2_smps_steps = 0;
+	u32 t2_smps_delay = 0;
+	u32 prm_vp1_voltage, prm_vp2_voltage, vp_config_offs;
+	u32 errorgain;
+
+	if (srid == SR1) {
+		target_opp_no = sr1.req_opp_no;
+		vsel = mpu_opps[target_opp_no].vsel;
+		reg_addr = R_VDD1_SR_CONTROL;
+		prm_vp1_voltage = prm_read_mod_reg(OMAP3430_GR_MOD,
+						OMAP3_PRM_VP1_VOLTAGE_OFFSET);
+		t2_smps_steps = abs(vsel - prm_vp1_voltage);
+		errorgain = (target_opp_no > SR_MAX_LOW_OPP) ?
+			PRM_VP1_CONFIG_ERRORGAIN_HIGHOPP :
+			PRM_VP1_CONFIG_ERRORGAIN_LOWOPP;
+		vp_config_offs = OMAP3_PRM_VP1_CONFIG_OFFSET;
+	} else if (srid == SR2) {
+		target_opp_no = sr2.req_opp_no;
+		vsel = l3_opps[target_opp_no].vsel;
+		reg_addr = R_VDD2_SR_CONTROL;
+		prm_vp2_voltage = prm_read_mod_reg(OMAP3430_GR_MOD,
+						OMAP3_PRM_VP2_VOLTAGE_OFFSET);
+		t2_smps_steps = abs(vsel - prm_vp2_voltage);
+		errorgain = (target_opp_no > SR_MAX_LOW_OPP) ?
+			PRM_VP2_CONFIG_ERRORGAIN_HIGHOPP :
+			PRM_VP2_CONFIG_ERRORGAIN_LOWOPP;
+		vp_config_offs = OMAP3_PRM_VP2_CONFIG_OFFSET;
+	} else {
+		WARN(1, "Bad SR ID %d", srid);
+		return SR_FAIL;
+	}
+
+	prm_rmw_mod_reg_bits(OMAP3430_ERRORGAIN_MASK, errorgain,
+			     OMAP3430_GR_MOD, vp_config_offs);
+
+	vc_bypass_value = (vsel << OMAP3430_DATA_SHIFT) |
+			(reg_addr << OMAP3430_REGADDR_SHIFT) |
+			(R_SRI2C_SLAVE_ADDR << OMAP3430_SLAVEADDR_SHIFT);
+
+	prm_write_mod_reg(vc_bypass_value, OMAP3430_GR_MOD,
+			OMAP3_PRM_VC_BYPASS_VAL_OFFSET);
+
+	vc_bypass_value = prm_set_mod_reg_bits(OMAP3430_VALID, OMAP3430_GR_MOD,
+					OMAP3_PRM_VC_BYPASS_VAL_OFFSET);
+
+	while ((vc_bypass_value & OMAP3430_VALID) != 0x0) {
+		loop_cnt++;
+		if (retries_cnt > 10) {
+			printk(KERN_INFO "Loop count exceeded in check SR I2C"
+								"write\n");
+			return SR_FAIL;
+		}
+		if (loop_cnt > 50) {
+			retries_cnt++;
+			loop_cnt = 0;
+			udelay(10);
+		}
+		vc_bypass_value = prm_read_mod_reg(OMAP3430_GR_MOD,
+					OMAP3_PRM_VC_BYPASS_VAL_OFFSET);
+	}
+
+	/*
+	 *  T2 SMPS slew rate (min) 4mV/uS, step size 12.5mV,
+	 *  2us added as buffer.
+	 */
+	t2_smps_delay = ((t2_smps_steps * 125) / 40) + 2;
+	udelay(t2_smps_delay);
+
+	return SR_PASS;
+}
+
 static int sr_enable(struct omap_sr *sr, u32 target_opp_no)
 {
-	u32 nvalue_reciprocal;
+	u32 nvalue_reciprocal, v;
+	u8 errminlimit;
+
+	BUG_ON(!(mpu_opps && l3_opps));
 
 	sr->req_opp_no = target_opp_no;
 
@@ -415,40 +559,190 @@ static int sr_enable(struct omap_sr *sr, u32 target_opp_no)
 	sr_write_reg(sr, NVALUERECIPROCAL, nvalue_reciprocal);
 
 	/* Enable the interrupt */
-	sr_modify_reg(sr, ERRCONFIG,
-			(ERRCONFIG_VPBOUNDINTEN | ERRCONFIG_VPBOUNDINTST),
+	sr_modify_reg(sr, ERRCONFIG, (ERRCONFIG_VPBOUNDINTEN |
+				ERRCONFIG_INTERRUPT_STATUS_MASK),
 			(ERRCONFIG_VPBOUNDINTEN | ERRCONFIG_VPBOUNDINTST));
+
 	if (sr->srid == SR1) {
+		errminlimit = (target_opp_no > SR_MAX_LOW_OPP) ?
+			SR1_ERRMINLIMIT_HIGHOPP : SR1_ERRMINLIMIT_LOWOPP;
+
+		/* set/latch init voltage */
+		v = prm_read_mod_reg(OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP1_CONFIG_OFFSET);
+		v &= ~(OMAP3430_INITVOLTAGE_MASK | OMAP3430_INITVDD);
+		v |= mpu_opps[target_opp_no].vsel <<
+			OMAP3430_INITVOLTAGE_SHIFT;
+		prm_write_mod_reg(v, OMAP3430_GR_MOD,
+				  OMAP3_PRM_VP1_CONFIG_OFFSET);
+		/* write1 to latch */
+		prm_set_mod_reg_bits(OMAP3430_INITVDD, OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP1_CONFIG_OFFSET);
+		/* write2 clear */
+		prm_clear_mod_reg_bits(OMAP3430_INITVDD, OMAP3430_GR_MOD,
+				       OMAP3_PRM_VP1_CONFIG_OFFSET);
 		/* Enable VP1 */
 		prm_set_mod_reg_bits(PRM_VP1_CONFIG_VPENABLE, OMAP3430_GR_MOD,
-				OMAP3_PRM_VP1_CONFIG_OFFSET);
+				     OMAP3_PRM_VP1_CONFIG_OFFSET);
 	} else if (sr->srid == SR2) {
+		errminlimit = (target_opp_no > SR_MAX_LOW_OPP) ?
+			SR2_ERRMINLIMIT_HIGHOPP : SR2_ERRMINLIMIT_LOWOPP;
+
+		/* set/latch init voltage */
+		v = prm_read_mod_reg(OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP2_CONFIG_OFFSET);
+		v &= ~(OMAP3430_INITVOLTAGE_MASK | OMAP3430_INITVDD);
+		v |= l3_opps[target_opp_no].vsel <<
+			OMAP3430_INITVOLTAGE_SHIFT;
+		prm_write_mod_reg(v, OMAP3430_GR_MOD,
+				  OMAP3_PRM_VP2_CONFIG_OFFSET);
+		/* write1 to latch */
+		prm_set_mod_reg_bits(OMAP3430_INITVDD, OMAP3430_GR_MOD,
+				     OMAP3_PRM_VP2_CONFIG_OFFSET);
+		/* write2 clear */
+		prm_clear_mod_reg_bits(OMAP3430_INITVDD, OMAP3430_GR_MOD,
+				       OMAP3_PRM_VP2_CONFIG_OFFSET);
 		/* Enable VP2 */
 		prm_set_mod_reg_bits(PRM_VP2_CONFIG_VPENABLE, OMAP3430_GR_MOD,
-				OMAP3_PRM_VP2_CONFIG_OFFSET);
+				     OMAP3_PRM_VP2_CONFIG_OFFSET);
+	} else {
+		WARN(1, "Bad SR ID %d", sr->srid);
+		return SR_FAIL;
 	}
+
+	sr_modify_reg(sr, ERRCONFIG, SR_ERRMINLIMIT_MASK |
+			ERRCONFIG_INTERRUPT_STATUS_MASK, errminlimit);
 
 	/* SRCONFIG - enable SR */
 	sr_modify_reg(sr, SRCONFIG, SRCONFIG_SRENABLE, SRCONFIG_SRENABLE);
 	return SR_TRUE;
 }
 
-static void sr_disable(struct omap_sr *sr)
+static void vp_disable(struct omap_sr *sr)
 {
-	sr->is_sr_reset = 1;
-
-	/* SRCONFIG - disable SR */
-	sr_modify_reg(sr, SRCONFIG, SRCONFIG_SRENABLE, ~SRCONFIG_SRENABLE);
+	u32 vp_config_offs, vp_status_offs;
+	u32 vp_tranxdone_st;
+	int c = 0, v;
 
 	if (sr->srid == SR1) {
-		/* Disable VP1 */
-		prm_clear_mod_reg_bits(PRM_VP1_CONFIG_VPENABLE, OMAP3430_GR_MOD,
-					OMAP3_PRM_VP1_CONFIG_OFFSET);
+		vp_config_offs = OMAP3_PRM_VP1_CONFIG_OFFSET;
+		vp_status_offs = OMAP3_PRM_VP1_STATUS_OFFSET;
+		vp_tranxdone_st = OMAP3430_VP1_TRANXDONE_ST;
 	} else if (sr->srid == SR2) {
-		/* Disable VP2 */
-		prm_clear_mod_reg_bits(PRM_VP2_CONFIG_VPENABLE, OMAP3430_GR_MOD,
-					OMAP3_PRM_VP2_CONFIG_OFFSET);
+		vp_config_offs = OMAP3_PRM_VP2_CONFIG_OFFSET;
+		vp_status_offs = OMAP3_PRM_VP2_STATUS_OFFSET;
+		vp_tranxdone_st = OMAP3430_VP2_TRANXDONE_ST;
+	} else {
+		WARN(1, "Bad SR ID");
+		return;
 	}
+
+	/*
+	 * Clear all pending TransactionDone int/st here
+	 * XXX Do we need to make sure this INTEN bit is masked so the
+	 * PRCM ISR isn't called?
+	 */
+	do {
+		prm_write_mod_reg(vp_tranxdone_st, OCP_MOD,
+				  OMAP2_PRM_IRQSTATUS_MPU_OFFSET);
+		v = prm_read_mod_reg(OCP_MOD, OMAP2_PRM_IRQSTATUS_MPU_OFFSET);
+		v &= vp_tranxdone_st;
+		/*
+		 * XXX This udelay(1) will wait for longer than 1
+		 * microsecond when switching to a lower OPP, since
+		 * loops_per_jiffy is not yet updated at this point
+		 */
+		if (v)
+			udelay(1);
+		c++;
+	} while (v && c < VP_TRANXDONE_TIMEOUT);
+
+	/* XXX Need clarity from TI on what to do if the timeout is reached */
+	WARN(c == VP_TRANXDONE_TIMEOUT, "VP: TRANXDONE timeout exceeded");
+
+	/* Disable VP */
+	prm_clear_mod_reg_bits(OMAP3430_VPENABLE, OMAP3430_GR_MOD,
+			       vp_config_offs);
+
+	/* Wait for VP to be in IDLE - typical latency < 1 microsecond */
+	c = 0;
+	while (c < VP_IDLE_TIMEOUT &&
+	       !(prm_read_mod_reg(OMAP3430_GR_MOD, vp_status_offs) &
+		 OMAP3430_VPINIDLE)) {
+		/*
+		 * XXX This udelay(1) will wait for longer than 1
+		 * microsecond when switching to a lower OPP, since
+		 * loops_per_jiffy is not yet updated at this point
+		 */
+		udelay(1);
+		c++;
+	}
+
+	/* XXX Need clarity from TI on what to do if the timeout is reached */
+	WARN(c == VP_IDLE_TIMEOUT, "VP: IDLE timeout exceeded");
+}
+
+static void sr_disable(struct omap_sr *sr)
+{
+	u32 srconfig;
+	int c;
+	u8 retries = 0;
+
+	/* Check to see if SR is already disabled.  If so, skip */
+	srconfig = sr_read_reg(sr, SRCONFIG);
+	if (!(srconfig & SRCONFIG_SRENABLE)) {
+		/* XXX In callers, add disable VP after sr_clk_disable() etc */
+		sr->is_sr_reset = 1;
+		return;
+	}
+
+	/* Enable MCUDisableAcknowledge interrupt */
+	sr_modify_reg(sr, ERRCONFIG, ERRCONFIG_MCUDISACKINTEN |
+			ERRCONFIG_INTERRUPT_STATUS_MASK,
+		      ERRCONFIG_MCUDISACKINTEN);
+
+	/* Clear SREnable */
+	srconfig &= ~SRCONFIG_SRENABLE;
+	sr_write_reg(sr, SRCONFIG, srconfig);
+
+	/* Disable VPBOUND interrupt enable and status */
+	sr_modify_reg(sr, ERRCONFIG, ERRCONFIG_VPBOUNDINTEN |
+			ERRCONFIG_INTERRUPT_STATUS_MASK,
+		      ERRCONFIG_VPBOUNDINTST);
+
+	do {
+		c = 0;
+		/* Wait for SR to be disabled - typical time < 1 microsecond */
+		while (c < SR_DISABLE_TIMEOUT &&
+		       !(sr_read_reg(sr, ERRCONFIG) & ERRCONFIG_MCUDISACKINTST)) {
+			/*
+			 * XXX This udelay(1) will wait for longer than 1
+			 * microsecond when switching to a lower OPP, since
+			 * loops_per_jiffy is not yet updated at this point
+			 */
+			udelay(1);
+			c++;
+		}
+
+		/* Could be due to a board-level I2C4 problem */
+		WARN(c == SR_DISABLE_TIMEOUT, "SR disable timed out - "
+		     "should never happen");
+
+	} while ((c == SR_DISABLE_TIMEOUT) &&
+		 (++retries < SR_DISABLE_MAX_ATTEMPTS));
+
+	WARN(retries == SR_DISABLE_MAX_ATTEMPTS, "SR voltage change failed "
+	     "despite %d retries - should never happen - system will likely "
+	     "crash soon", SR_DISABLE_MAX_ATTEMPTS);
+
+	/* Disable MCUDisableAck interrupt and clear pending */
+	sr_modify_reg(sr, ERRCONFIG, (ERRCONFIG_MCUDISACKINTEN |
+				ERRCONFIG_INTERRUPT_STATUS_MASK),
+			ERRCONFIG_MCUDISACKINTST);
+
+	/* Disable SR func clk - done by sr_clk_disable() */
+
+	sr->is_sr_reset = 1;
 }
 
 
@@ -460,19 +754,16 @@ void sr_start_vddautocomap(int srid, u32 target_opp_no)
 		sr = &sr1;
 	else if (srid == SR2)
 		sr = &sr2;
+	else
+		return;
 
 	if (sr->is_sr_reset == 1) {
 		sr_clk_enable(sr);
 		sr_configure(sr);
 	}
 
-	if (sr->is_autocomp_active == 1)
-		printk(KERN_WARNING "SR%d: VDD autocomp is already active\n",
-									srid);
-
 	sr->is_autocomp_active = 1;
 	if (!sr_enable(sr, target_opp_no)) {
-		printk(KERN_WARNING "SR%d: VDD autocomp not activated\n", srid);
 		sr->is_autocomp_active = 0;
 		if (sr->is_sr_reset == 1)
 			sr_clk_disable(sr);
@@ -488,18 +779,19 @@ int sr_stop_vddautocomap(int srid)
 		sr = &sr1;
 	else if (srid == SR2)
 		sr = &sr2;
+	else
+		return -EINVAL;
 
 	if (sr->is_autocomp_active == 1) {
+		vp_disable(sr);
 		sr_disable(sr);
 		sr_clk_disable(sr);
 		sr->is_autocomp_active = 0;
+		/* Reset the volatage for current OPP */
+		sr_reset_voltage(srid);
 		return SR_TRUE;
-	} else {
-		printk(KERN_WARNING "SR%d: VDD autocomp is not active\n",
-								srid);
+	} else
 		return SR_FALSE;
-	}
-
 }
 EXPORT_SYMBOL(sr_stop_vddautocomap);
 
@@ -512,16 +804,15 @@ void enable_smartreflex(int srid)
 		sr = &sr1;
 	else if (srid == SR2)
 		sr = &sr2;
+	else
+		return;
 
 	if (sr->is_autocomp_active == 1) {
 		if (sr->is_sr_reset == 1) {
 			/* Enable SR clks */
 			sr_clk_enable(sr);
 
-			if (srid == SR1)
-				target_opp_no = get_opp_no(current_vdd1_opp);
-			else if (srid == SR2)
-				target_opp_no = get_opp_no(current_vdd2_opp);
+			target_opp_no = sr->req_opp_no;
 
 			sr_configure(sr);
 
@@ -539,64 +830,80 @@ void disable_smartreflex(int srid)
 		sr = &sr1;
 	else if (srid == SR2)
 		sr = &sr2;
+	else
+		return;
 
 	if (sr->is_autocomp_active == 1) {
 		if (sr->is_sr_reset == 0) {
 
 			sr->is_sr_reset = 1;
-			/* SRCONFIG - disable SR */
-			sr_modify_reg(sr, SRCONFIG, SRCONFIG_SRENABLE,
-							~SRCONFIG_SRENABLE);
-
+			vp_disable(sr);
+			sr_disable(sr);
 			/* Disable SR clk */
 			sr_clk_disable(sr);
-			if (sr->srid == SR1) {
-				/* Disable VP1 */
-				prm_clear_mod_reg_bits(PRM_VP1_CONFIG_VPENABLE,
-						OMAP3430_GR_MOD,
-						OMAP3_PRM_VP1_CONFIG_OFFSET);
-			} else if (sr->srid == SR2) {
-				/* Disable VP2 */
-				prm_clear_mod_reg_bits(PRM_VP2_CONFIG_VPENABLE,
-						OMAP3430_GR_MOD,
-						OMAP3_PRM_VP2_CONFIG_OFFSET);
-			}
+			/* Reset the volatage for current OPP */
+			sr_reset_voltage(srid);
 		}
 	}
 }
 
 /* Voltage Scaling using SR VCBYPASS */
-int sr_voltagescale_vcbypass(u32 target_opp, u8 vsel)
+int sr_voltagescale_vcbypass(u32 target_opp, u32 current_opp,
+					u8 target_vsel, u8 current_vsel)
 {
-	int sr_status = 0;
-	u32 vdd, target_opp_no;
+	u32 vdd, target_opp_no, current_opp_no;
 	u32 vc_bypass_value;
 	u32 reg_addr = 0;
 	u32 loop_cnt = 0, retries_cnt = 0;
+	u32 t2_smps_steps = 0;
+	u32 t2_smps_delay = 0;
+	u32 vc_cmd_val_offs, vp_config_offs;
+	u32 errorgain;
+	struct omap_sr *sr;
 
 	vdd = get_vdd(target_opp);
 	target_opp_no = get_opp_no(target_opp);
+	current_opp_no = get_opp_no(current_opp);
 
 	if (vdd == PRCM_VDD1) {
-		sr_status = sr_stop_vddautocomap(SR1);
+		t2_smps_steps = abs(target_vsel - current_vsel);
+		errorgain = (target_opp_no > SR_MAX_LOW_OPP) ?
+			PRM_VP1_CONFIG_ERRORGAIN_HIGHOPP :
+			PRM_VP1_CONFIG_ERRORGAIN_LOWOPP;
 
-		prm_rmw_mod_reg_bits(OMAP3430_VC_CMD_ON_MASK,
-					(vsel << OMAP3430_VC_CMD_ON_SHIFT),
-					OMAP3430_GR_MOD,
-					OMAP3_PRM_VC_CMD_VAL_0_OFFSET);
+		vc_cmd_val_offs = OMAP3_PRM_VC_CMD_VAL_0_OFFSET;
+		vp_config_offs = OMAP3_PRM_VP1_CONFIG_OFFSET;
 		reg_addr = R_VDD1_SR_CONTROL;
-
+		sr = &sr1;
 	} else if (vdd == PRCM_VDD2) {
-		sr_status = sr_stop_vddautocomap(SR2);
+		t2_smps_steps = abs(target_vsel - current_vsel);
+		errorgain = (target_opp_no > SR_MAX_LOW_OPP) ?
+			PRM_VP2_CONFIG_ERRORGAIN_HIGHOPP :
+			PRM_VP2_CONFIG_ERRORGAIN_LOWOPP;
 
-		prm_rmw_mod_reg_bits(OMAP3430_VC_CMD_ON_MASK,
-					(vsel << OMAP3430_VC_CMD_ON_SHIFT),
-					OMAP3430_GR_MOD,
-					OMAP3_PRM_VC_CMD_VAL_1_OFFSET);
+		vc_cmd_val_offs = OMAP3_PRM_VC_CMD_VAL_1_OFFSET;
+		vp_config_offs = OMAP3_PRM_VP2_CONFIG_OFFSET;
 		reg_addr = R_VDD2_SR_CONTROL;
+		sr = &sr2;
+	} else {
+		WARN(1, "SR: invalid VDD in vcbypass scale");
+		return SR_FAIL;
 	}
 
-	vc_bypass_value = (vsel << OMAP3430_DATA_SHIFT) |
+	if (sr->is_autocomp_active) {
+		WARN(1, "SR: Must not transmit VCBYPASS command while SR is "
+		     "active");
+		return SR_FAIL;
+	}
+
+	prm_rmw_mod_reg_bits(OMAP3430_ERRORGAIN_MASK, errorgain,
+			     OMAP3430_GR_MOD, vp_config_offs);
+
+	prm_rmw_mod_reg_bits(OMAP3430_VC_CMD_ON_MASK,
+			     (target_vsel << OMAP3430_VC_CMD_ON_SHIFT),
+			     OMAP3430_GR_MOD, vc_cmd_val_offs);
+
+	vc_bypass_value = (target_vsel << OMAP3430_DATA_SHIFT) |
 			(reg_addr << OMAP3430_REGADDR_SHIFT) |
 			(R_SRI2C_SLAVE_ADDR << OMAP3430_SLAVEADDR_SHIFT);
 
@@ -622,14 +929,13 @@ int sr_voltagescale_vcbypass(u32 target_opp, u8 vsel)
 					OMAP3_PRM_VC_BYPASS_VAL_OFFSET);
 	}
 
-	udelay(T2_SMPS_UPDATE_DELAY);
+	/*
+	 *  T2 SMPS slew rate (min) 4mV/uS, step size 12.5mV,
+	 *  2us added as buffer.
+	 */
+	t2_smps_delay = ((t2_smps_steps * 125) / 40) + 2;
+	udelay(t2_smps_delay);
 
-	if (sr_status) {
-		if (vdd == PRCM_VDD1)
-			sr_start_vddautocomap(SR1, target_opp_no);
-		else if (vdd == PRCM_VDD2)
-			sr_start_vddautocomap(SR2, target_opp_no);
-	}
 
 	return SR_PASS;
 }
@@ -645,7 +951,6 @@ static ssize_t omap_sr_vdd1_autocomp_store(struct kobject *kobj,
 					struct kobj_attribute *attr,
 					const char *buf, size_t n)
 {
-	u32 current_vdd1opp_no;
 	unsigned short value;
 
 	if (sscanf(buf, "%hu", &value) != 1 || (value > 1)) {
@@ -653,12 +958,20 @@ static ssize_t omap_sr_vdd1_autocomp_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	current_vdd1opp_no = get_opp_no(current_vdd1_opp);
+	mutex_lock(&dvfs_mutex);
 
-	if (value == 0)
+	if (value == 0) {
 		sr_stop_vddautocomap(SR1);
-	else
+	} else {
+		u32 current_vdd1opp_no = resource_get_level("vdd1_opp");
+		if (IS_ERR_VALUE(current_vdd1opp_no)) {
+			mutex_unlock(&dvfs_mutex);
+			return -ENODEV;
+		}
 		sr_start_vddautocomap(SR1, current_vdd1opp_no);
+	}
+
+	mutex_unlock(&dvfs_mutex);
 
 	return n;
 }
@@ -691,12 +1004,21 @@ static ssize_t omap_sr_vdd2_autocomp_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	current_vdd2opp_no = get_opp_no(current_vdd2_opp);
+	if (value != 0) {
+		pr_warning("VDD2 smartreflex is broken\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&dvfs_mutex);
+
+	current_vdd2opp_no = resource_get_level("vdd2_opp");
 
 	if (value == 0)
 		sr_stop_vddautocomap(SR2);
 	else
 		sr_start_vddautocomap(SR2, current_vdd2opp_no);
+
+	mutex_unlock(&dvfs_mutex);
 
 	return n;
 }
@@ -710,20 +1032,38 @@ static struct kobj_attribute sr_vdd2_autocomp = {
 	.store = omap_sr_vdd2_autocomp_store,
 };
 
+static ssize_t omap_sr_opp1_efuse_show(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					char *buf)
+{
+	return sprintf(buf, "%08x\n%08x\n%08x\n%08x\n%08x\n", sr1.opp1_nvalue,
+							sr1.opp2_nvalue,
+							sr1.opp3_nvalue,
+							sr1.opp4_nvalue,
+							sr1.opp5_nvalue);
+}
 
+static struct kobj_attribute sr_efuse = {
+	.attr = {
+	.name = "Efuse",
+	.mode = 0444,
+	},
+	.show = omap_sr_opp1_efuse_show,
+};
 
 static int __init omap3_sr_init(void)
 {
 	int ret = 0;
 	u8 RdReg;
 
-	if (omap_rev() > OMAP3430_REV_ES1_0) {
-		current_vdd1_opp = PRCM_VDD1_OPP3;
-		current_vdd2_opp = PRCM_VDD2_OPP3;
-	} else {
-		current_vdd1_opp = PRCM_VDD1_OPP1;
-		current_vdd2_opp = PRCM_VDD1_OPP1;
-	}
+	/* Enable SR on T2 */
+	ret = twl4030_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, &RdReg,
+					R_DCDC_GLOBAL_CFG);
+
+	RdReg |= DCDC_GLOBAL_CFG_ENABLE_SRFLX;
+	ret |= twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, RdReg,
+					R_DCDC_GLOBAL_CFG);
+
 	if (cpu_is_omap34xx()) {
 		sr1.clk = clk_get(NULL, "sr1_fck");
 		sr2.clk = clk_get(NULL, "sr2_fck");
@@ -738,14 +1078,6 @@ static int __init omap3_sr_init(void)
 	sr_set_nvalues(&sr2);
 	sr_configure_vp(SR2);
 
-	/* Enable SR on T2 */
-	ret = twl4030_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, &RdReg,
-					R_DCDC_GLOBAL_CFG);
-
-	RdReg |= DCDC_GLOBAL_CFG_ENABLE_SRFLX;
-	ret |= twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, RdReg,
-					R_DCDC_GLOBAL_CFG);
-
 	printk(KERN_INFO "SmartReflex driver initialized\n");
 
 	ret = sysfs_create_file(power_kobj, &sr_vdd1_autocomp.attr);
@@ -755,6 +1087,10 @@ static int __init omap3_sr_init(void)
 	ret = sysfs_create_file(power_kobj, &sr_vdd2_autocomp.attr);
 	if (ret)
 		printk(KERN_ERR "sysfs_create_file failed: %d\n", ret);
+
+	ret = sysfs_create_file(power_kobj, &sr_efuse.attr);
+	if (ret)
+		printk(KERN_ERR "sysfs_create_file failed for OPP data: %d\n", ret);
 
 	return 0;
 }

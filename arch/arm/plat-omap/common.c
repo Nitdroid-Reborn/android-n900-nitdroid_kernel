@@ -46,6 +46,12 @@ int omap_bootloader_tag_len;
 struct omap_board_config_kernel *omap_board_config;
 int omap_board_config_size;
 
+#ifdef CONFIG_OMAP_PM_NONE
+struct omap_opp *mpu_opps;
+struct omap_opp *dsp_opps;
+struct omap_opp *l3_opps;
+#endif
+
 #ifdef CONFIG_OMAP_BOOT_TAG
 
 static int __init parse_tag_omap(const struct tag *tag)
@@ -220,20 +226,16 @@ static struct clocksource clocksource_32k = {
 };
 
 /*
- * Rounds down to nearest nsec.
- */
-unsigned long long omap_32k_ticks_to_nsecs(unsigned long ticks_32k)
-{
-	return cyc2ns(&clocksource_32k, ticks_32k);
-}
-
-/*
  * Returns current time from boot in nsecs. It's OK for this to wrap
  * around for now, as it's just a relative time stamp.
  */
 unsigned long long sched_clock(void)
 {
-	return omap_32k_ticks_to_nsecs(omap_32k_read());
+	unsigned long long ret;
+
+	ret = (unsigned long long)omap_32k_read();
+	ret = (ret * clocksource_32k.mult_orig) >> clocksource_32k.shift;
+	return ret;
 }
 
 static int __init omap_init_clocksource_32k(void)

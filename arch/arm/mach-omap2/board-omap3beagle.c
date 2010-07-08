@@ -43,10 +43,13 @@
 #include <mach/gpmc.h>
 #include <mach/nand.h>
 #include <mach/mux.h>
+#include <mach/omap-pm.h>
+#include <mach/clock.h>
 
 #include "twl4030-generic-scripts.h"
 #include "mmc-twl4030.h"
-
+#include "pm.h"
+#include "omap3-opp.h"
 
 #define GPMC_CS0_BASE  0x60
 #define GPMC_CS_SIZE   0x30
@@ -233,7 +236,11 @@ static int __init omap3_beagle_i2c_init(void)
 
 static void __init omap3_beagle_init_irq(void)
 {
-	omap2_init_common_hw(mt46h32m32lf6_sdrc_params);
+	omap2_init_common_hw(mt46h32m32lf6_sdrc_params,
+			     mt46h32m32lf6_sdrc_params,
+			     omap3_mpu_rate_table,
+			     omap3_dsp_rate_table,
+			     omap3_l3_rate_table);
 	omap_init_irq();
 	omap_gpio_init();
 }
@@ -363,9 +370,13 @@ static void __init omap3_beagle_init(void)
 	/* REVISIT leave DVI powered down until it's needed ... */
 	gpio_direction_output(170, true);
 
-	usb_musb_init();
+	usb_musb_init(NULL);
 	usb_ehci_init();
 	omap3beagle_flash_init();
+
+	/* Ensure SDRC pins are mux'd for self-refresh */
+	omap_cfg_reg(H16_34XX_SDRC_CKE0);
+	omap_cfg_reg(H17_34XX_SDRC_CKE1);
 }
 
 static void __init omap3_beagle_map_io(void)

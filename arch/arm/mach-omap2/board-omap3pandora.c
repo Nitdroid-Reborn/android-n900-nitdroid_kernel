@@ -157,6 +157,7 @@ static struct twl4030_hsmmc_info omap3pandora_mmc[] = {
 		.gpio_cd	= -EINVAL,
 		.gpio_wp	= 127,
 		.ext_clock	= 1,
+		.transceiver	= true,
 	},
 	{}	/* Terminator */
 };
@@ -214,7 +215,8 @@ static int __init omap3pandora_i2c_init(void)
 
 static void __init omap3pandora_init_irq(void)
 {
-	omap2_init_common_hw(mt46h32m32lf6_sdrc_params);
+	omap2_init_common_hw(mt46h32m32lf6_sdrc_params, NULL,
+			     NULL, NULL, NULL);
 	omap_init_irq();
 	omap_gpio_init();
 }
@@ -296,7 +298,7 @@ static void __init omap3pandora_init(void)
 	omap_serial_init();
 	spi_register_board_info(omap3pandora_spi_board_info,
 			ARRAY_SIZE(omap3pandora_spi_board_info));
-	usb_musb_init();
+	usb_musb_init(NULL);
 	usb_ehci_init();
 	omap3pandora_flash_init();
 	omap3pandora_ads7846_init();
