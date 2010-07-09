@@ -448,22 +448,6 @@ static struct i2c_board_info rx51_camera_board_info_2 =
 		.platform_data = &bq27200_config,
 	};
 
-static struct i2c_client *client;
-
-struct bq27200_platform_data {
-	int dummy;
-};
-
-static struct bq27200_platform_data bq27200_config = {
-	.dummy = 0,
-};
-
-static struct i2c_board_info rx51_camera_board_info_2 =
-	{
-		I2C_BOARD_INFO("bq27200", 0x55),
-		.platform_data = &bq27200_config,
-	};
-
 
 
 static int __init bq27x00_battery_init(void)
