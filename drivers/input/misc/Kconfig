@@ -212,10 +212,11 @@ config INPUT_SGI_BTNS
 	  To compile this driver as a module, choose M here: the
 	  module will be called sgi_btns.
 
-config INPUT_GPIO
-	tristate "GPIO driver support"
+config INPUT_ANDROID_GPIO
+	tristate "Android GPIO driver support"
 	help
-	  Say Y here if you want to support gpio based keys, wheels etc...
+	  Say Y here if you want to include Android's example gpio
+	  code for keys, switches, yokes, wheels etc...
 
 config HP_SDC_RTC
 	tristate "HP SDC Real Time Clock"
