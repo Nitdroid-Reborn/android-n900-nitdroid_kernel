@@ -294,12 +294,12 @@ static int bq27200_read(u8 reg, int *rt_value, int b_single,
 	return err;
 }
 
-static void* bq27_work_handler(struct delayed_work *work)
+static void bq27_work_handler(struct work_struct *work)
 {
 	union power_supply_propval val;
 	int new_charge_rsoc, new_status;
 	struct bq27x00_device_info *di =
-		container_of(work, struct bq27x00_device_info, bq27_work);
+		container_of(work, struct bq27x00_device_info, bq27_work.work);
 
 	new_charge_rsoc = bq27x00_battery_rsoc(di);
 	bq27x00_battery_status(di, &val);
@@ -316,7 +316,6 @@ static void* bq27_work_handler(struct delayed_work *work)
 
 
 	schedule_delayed_work(&di->bq27_work, POLLING_DELAY);
-	return 0;
 }
 
 static int bq27200_battery_probe(struct i2c_client *client,

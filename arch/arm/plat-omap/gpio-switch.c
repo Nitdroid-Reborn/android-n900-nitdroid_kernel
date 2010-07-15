@@ -565,10 +565,11 @@ static int __init gpio_sw_init(void)
 		goto err1;
 	}
 
+#ifdef CONFIG_OMAP_ATAG_SWITCHES
 	r = add_atag_switches();
 	if (r < 0)
 		goto err2;
-
+#endif
 	r = add_board_switches();
 	if (r < 0)
 		goto err2;

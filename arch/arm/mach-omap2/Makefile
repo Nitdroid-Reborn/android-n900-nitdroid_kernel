@@ -98,6 +98,7 @@ obj-$(CONFIG_MACH_NOKIA_RX51)		+= board-rx51.o \
 					   board-rx51-network.o \
 					   board-rx51-camera-base.o \
 					   board-rx51-peripherals.o \
+					   board-rx51-gpio.o \
 					   mmc-twl4030.o \
 					   ssi.o \
 					   usb-musb.o

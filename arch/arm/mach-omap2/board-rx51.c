@@ -49,6 +49,7 @@
 
 extern int omap_init_fb(void);
 extern void rx51_video_mem_init(void);
+extern void rx51_gpio_init(void);
 
 static struct omap_uart_config rx51_uart_config = {
 	.enabled_uarts	= ((1 << 0) | (1 << 1) | (1 << 2)),
@@ -167,6 +168,7 @@ static void __init rx51_init(void)
 	rx51_xceiv_init();
 	usb_musb_init(&rx51_musb_data);
 	omap_serial_init();
+	rx51_gpio_init();
 	rx51_pm_init();
 	/*
 	 * With this early call work around a current clock framework problem
