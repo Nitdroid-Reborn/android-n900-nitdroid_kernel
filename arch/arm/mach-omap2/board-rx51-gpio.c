@@ -41,6 +41,12 @@
 
 static struct omap_gpio_switch rx51_gpio_switches[] = {
 	{
+		.name			= "sw_lid",
+		.gpio			= RX51_KB_SLIDE_GPIO,
+		.debounce_rising	= 100,
+		.debounce_falling	= 100,
+	}, 
+	{
 		.name			= "headphone",
 		.gpio			= RX51_HEADPHONE_GPIO,
 		.debounce_rising	= 200,
@@ -55,15 +61,6 @@ static struct omap_gpio_switch rx51_gpio_switches[] = {
 };
 
 static struct gpio_keys_button rx51_gpio_keys_buttons[] = {
-	{
-		.code			= SW_LID,
-		.desc			= "sw_lid",
-		.gpio			= RX51_KB_SLIDE_GPIO,
-		.type			= EV_SW,
-		.debounce_interval	= 100,
-		.wakeup			= 1,
-		//.active_low		= 1,
-	},
 	{
 		.code			= KEY_SCREENLOCK,
 		.gpio			= RX51_KB_LOCK_GPIO,
