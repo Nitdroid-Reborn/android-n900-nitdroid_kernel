@@ -10,58 +10,34 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/platform_device.h>
 #include <linux/input.h>
-#include <linux/camera_button.h>
 #include <linux/clk.h>
-#include <linux/delay.h>
 #include <linux/gpio_keys.h>
+#include <linux/platform_device.h>
 
 #include <asm/mach-types.h>
 
-#include <mach/mcspi.h>
 #include <mach/gpio.h>
 #include <mach/mux.h>
 #include <mach/board.h>
 #include <mach/common.h>
 #include <mach/keypad.h>
-#include <mach/dma.h>
-#include <mach/gpmc.h>
-#include <mach/ssi.h>
-#include <mach/omap-pm.h>
 
-#define RX51_CAMERA_FOCUS_GPIO		68
-#define RX51_CAMERA_LAUNCH_GPIO		69
-#define RX51_KB_SLIDE_GPIO		71
-#define RX51_PROXIMITY_GPIO		89
-#define RX51_CAMERA_SHUTTER_GPIO	110
+
 #define RX51_KB_LOCK_GPIO		113
-#define RX51_HEADPHONE_GPIO		177
+#define RX51_KB_SLIDE_GPIO		71
+#define RX51_CAMERA_FOCUS_GPIO		68
+#define RX51_CAMERA_SHUTTER_GPIO	69
+#define RX51_CAMERA_LENS_COVER_GPIO	110
+#define RX51_PROXIMITY_SENSOR_GPIO	89
+#define RX51_HEADPHONE_INSERT_GPIO	177
 
+#define SW_LENS_COVER			0x0A
 
-static struct omap_gpio_switch rx51_gpio_switches[] = {
-	{
-		.name			= "sw_lid",
-		.gpio			= RX51_KB_SLIDE_GPIO,
-		.debounce_rising	= 100,
-		.debounce_falling	= 100,
-	}, 
-	{
-		.name			= "headphone",
-		.gpio			= RX51_HEADPHONE_GPIO,
-		.debounce_rising	= 200,
-		.debounce_falling	= 200,
-	},
-	{
-		.name			= "camera",
-		.gpio			= RX51_CAMERA_SHUTTER_GPIO,
-		.debounce_rising	= 30,
-		.debounce_falling	= 30,
-	}, 
-};
 
 static struct gpio_keys_button rx51_gpio_keys_buttons[] = {
 	{
+		.type			= EV_KEY,
 		.code			= KEY_SCREENLOCK,
 		.gpio			= RX51_KB_LOCK_GPIO,
 		.desc			= "kbd lock",
@@ -69,6 +45,7 @@ static struct gpio_keys_button rx51_gpio_keys_buttons[] = {
 		.debounce_interval	= 30,
 	},
 	{
+		.type			= EV_KEY,
 		.code			= KEY_ZOOM,
 		.gpio			= RX51_CAMERA_FOCUS_GPIO,
 		.desc			= "camera focus",
@@ -76,18 +53,44 @@ static struct gpio_keys_button rx51_gpio_keys_buttons[] = {
 		.debounce_interval	= 30,
 	},
 	{
+		.type			= EV_KEY,
 		.code			= KEY_CAMERA,
-		.gpio			= RX51_CAMERA_LAUNCH_GPIO,
-		.desc			= "camera launch",
+		.gpio			= RX51_CAMERA_SHUTTER_GPIO,
+		.desc			= "camera shutter",
 		.active_low		= 1,
 		.debounce_interval	= 30,
 	},
 	{
+		.type			= EV_KEY,
 		.code			= KEY_LINEFEED,
-		.gpio			= RX51_PROXIMITY_GPIO,
-		.desc			= "proximity",
+		.gpio			= RX51_PROXIMITY_SENSOR_GPIO,
+		.desc			= "proximity sensor",
 		.active_low		= 1,
 		.debounce_interval	= 30,
+	}, 
+	{
+		.type			= EV_SW,
+		.code			= SW_LID,
+		.gpio			= RX51_KB_SLIDE_GPIO,
+		.desc			= "keyboard slide",
+		.wakeup			= 1,
+		.debounce_interval	= 100,
+	},
+	{
+		.type			= EV_SW,
+		.code			= SW_HEADPHONE_INSERT,
+		.gpio			= RX51_HEADPHONE_INSERT_GPIO,
+		.desc			= "headphone insert",
+		.wakeup			= 1,
+		.debounce_interval	= 100,
+	}, 
+	{
+		.type			= EV_SW,
+		.code			= SW_LENS_COVER,
+		.gpio			= RX51_CAMERA_LENS_COVER_GPIO,
+		.desc			= "camera lens cover",
+		.wakeup			= 1,
+		.debounce_interval	= 100,
 	}, 
 };
 
@@ -113,12 +116,6 @@ static struct platform_device *rx51_gpio_devices[] = {
 
 void __init rx51_gpio_init(void)
 {
-	if (!machine_is_nokia_rx51())
-		return 0;
-	
-	omap_register_gpio_switches(rx51_gpio_switches,
-				    ARRAY_SIZE(rx51_gpio_switches));
-	
 	platform_add_devices(rx51_gpio_devices,
 			     ARRAY_SIZE(rx51_gpio_devices));
 	
