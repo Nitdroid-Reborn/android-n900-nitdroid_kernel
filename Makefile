@@ -1,8 +1,8 @@
 VERSION = 2
 PATCHLEVEL = 6
 SUBLEVEL = 28
-EXTRAVERSION = .NIT.04pre
-NAME = Maemo
+EXTRAVERSION = .NIT.04
+NAME = NITdroid
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
