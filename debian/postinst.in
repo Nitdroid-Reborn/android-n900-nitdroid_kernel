@@ -1,0 +1,59 @@
+#!/bin/sh
+
+is_and_mounted()
+{
+	cat /proc/mounts | cut -d' ' -f2 | grep -q -E '^/and$'
+}
+
+is_and_ok()
+{
+	is_and_mounted && test -d /and/system/etc
+}
+
+configure()
+{
+	if ! is_and_ok
+	then
+		echo "postinst: Android not mounted on '/and'. Can't do anything"
+		exit 1
+	fi
+
+	if [ ! -d /lib/modules/@VERSION@ ]
+	then
+		mkdir /lib/modules/@VERSION@
+	fi
+
+	if [ -f /and/system/lib/modules/@VERSION@/modules.maemo ]
+	then
+		echo "Copying @VERSION@ essential modules to Maemo..."
+		cat /and/system/lib/modules/@VERSION@/modules.maemo |
+		    while read file
+		    do
+			if [ -e /and/system/lib/modules/@VERSION@/$file ]
+			then
+				cp /and/system/lib/modules/@VERSION@/$file /lib/modules/@VERSION@
+			fi
+		    done
+	fi
+
+	echo "Running depmod..."
+	depmod -a @VERSION@
+	depmod -b /and/system -a @VERSION@
+}
+
+
+case "$1" in
+
+    configure)
+	configure
+	;;
+	
+    abort-*)
+	;;
+		
+    *)
+	echo "postinst called with unhandled argument $1" >&2
+	exit 1
+	;;
+esac
+

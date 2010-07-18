@@ -1,0 +1,50 @@
+#!/bin/sh
+
+is_and_mounted()
+{
+	cat /proc/mounts | cut -d' ' -f2 | grep -q -E '^/and$'
+}
+
+is_and_ok()
+{
+	is_and_mounted && test -d /and/system/etc
+}
+
+prepare()
+{
+	if ! is_and_ok
+	then
+		echo "preinst: Android not found. MUST be mounted on '/and'"
+		exit 1
+	fi
+
+	if [ -d /and/system/lib/modules/@VERSION@ ]
+	then
+		echo "preinst: Deleting existing @VERSION@ modules in Android..."
+		rm -f -r /and/system/lib/modules/@VERSION@
+	fi
+
+	if [ -d /lib/modules/@VERSION@ ]
+	then
+		echo "preinst: Deleting existing @VERSION@ modules in Maemo..."
+		rm -f -r /lib/modules/@VERSION@
+	fi
+}
+
+
+case "$1" in
+
+    install|upgrade)
+	prepare
+        ;;
+	
+    abort-upgrade)
+        ;;
+		
+    *)
+	echo "preinst called with unhandled argument $1" >&2
+	exit 1
+	;;
+
+esac
+

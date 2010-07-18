@@ -1,0 +1,90 @@
+#!/usr/bin/make -f
+
+VERSION := $(shell cat include/config/kernel.release)
+
+PACKAGE := $(shell dpkg-parsechangelog | awk '/^Source: / { print $$2 }')
+
+DESTDIR := $(CURDIR)/debian/$(PACKAGE)
+
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	$(MAKE) clean
+	$(MAKE) rx51_nitdroid_defconfig
+	touch $@
+
+
+build: build-stamp
+build-stamp: configure-stamp kernel-stamp
+	touch $@
+
+
+kernel-stamp: configure-stamp
+	dh_testdir
+	$(MAKE) bzImage modules
+	touch $@
+
+fake-stamps:
+	touch configure-stamp
+	touch kernel-stamp
+	touch build-stamp
+
+
+binary: binary-indep binary-arch
+
+# Build architecture-independent files here.
+binary-indep: build install
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	for file in preinst postinst prerm ; do \
+	  sed -e "s/@VERSION@/$(VERSION)/g" < $(CURDIR)/debian/$$file.in > $(CURDIR)/debian/$$file ; \
+	done
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs 
+	dh_installdocs
+	dh_installexamples
+	dh_installman
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+
+install: build
+	dh_testdir
+	dh_testroot
+	install -o root -g root -m 0755 -d $(DESTDIR)
+	dh_clean -k
+	dh_installdirs
+	install -o root -g root -m 0755 -d $(DESTDIR)/boot/multiboot
+	install -o root -g root -m 0644 $(CURDIR)/arch/arm/boot/zImage $(DESTDIR)/boot/multiboot/vmlinuz-$(VERSION)
+	install -o root -g root -m 0755 -d $(DESTDIR)/and/system/lib/modules/$(VERSION)
+	install -o root -g root -m 0644 $(CURDIR)/debian/modules.boot $(DESTDIR)/and/system/lib/modules/$(VERSION)
+	install -o root -g root -m 0644 $(CURDIR)/debian/modules.maemo $(DESTDIR)/and/system/lib/modules/$(VERSION)
+	cat $(CURDIR)/modules.order | sed 's|^kernel/||g' | while read file ; do \
+		echo "    $$file" ; \
+		install -o root -g root -m 0644 $$file $(DESTDIR)/and/system/lib/modules/$(VERSION) ; \
+		strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
+	done
+
+
+clean:
+	dh_testdir
+	dh_testroot
+	$(MAKE) distclean
+	rm -f debian/preinst debian/postinst debian/prerm
+	rm -f build-stamp configure-stamp
+	dh_clean
+
+
+
+.PHONY: build clean binary-indep binary-arch binary install configure
+

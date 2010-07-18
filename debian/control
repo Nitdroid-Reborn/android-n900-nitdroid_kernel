@@ -1,0 +1,24 @@
+Source: nitdroid-kernel-2.6.28-04
+Section: user/system
+Priority: extra
+Maintainer: Jay Cartman <jay.cartman@gmail.com>
+Build-Depends: debhelper (>= 5)
+Standards-Version: 3.7.2
+
+Package: nitdroid-kernel-2.6.28-04
+Architecture: armel
+Section: user/system
+Depends: multiboot (>= 0.2.3)
+Conflicts:
+Provides: nitdroid-kernel
+Description: Linux kernel for NITdroid
+ This package installs a kernel for NITdroid, an Android port to N900.
+ .
+ Before this package can be installed, you MUST have your NITdroid
+ partition mounted on '/and'.
+ .
+ To be able to boot this kernel, you need to MANUALLY add an entry
+ for multiboot, in /etc/multiboot.d/
+ .
+XB-Maemo-Display-Name: NITdroid kernel for N900.
+XB-Maemo-Flags: system-update

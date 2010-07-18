@@ -1,0 +1,51 @@
+#!/bin/sh
+
+is_and_mounted()
+{
+	cat /proc/mounts | cut -d' ' -f2 | grep -q -E '^/and$'
+}
+
+is_and_ok()
+{
+	is_and_mounted && test -d /and/system/etc
+}
+
+remove()
+{
+	if ! is_and_ok
+	then
+		echo "prerm: Android not found. MUST be mounted on '/and'"
+		exit 1
+	fi
+
+	if [ -d /and/system/lib/modules/@VERSION@ ]
+	then
+		echo "prerm: Deleting leftover @VERSION@ modules in Android..."
+		rm -f -r /and/system/lib/modules/@VERSION@
+	fi
+
+	if [ -d /lib/modules/@VERSION@ ]
+	then
+		echo "prerm: Deleting leftover @VERSION@ modules in Maemo..."
+		rm -f -r /lib/modules/@VERSION@
+	fi
+
+	return 0
+}
+
+
+case "$1" in
+
+    remove|upgrade)
+	remove
+	;;
+
+    failed-upgrade|deconfigure)
+	;;
+
+    *)
+	echo "prerm called with unhandled argument $1" >&2
+	exit 1
+	;;
+esac
+
