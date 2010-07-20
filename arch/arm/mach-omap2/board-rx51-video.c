@@ -33,6 +33,24 @@
 #include <mach/display.h>
 #include <../drivers/video/omap2/displays/panel-acx565akm.h>
 
+/* #define ANDROID_PAN_FLIP */
+
+#if defined OMAP2_DSS_VRAM_SIZE && OMAP2_DSS_VRAM_SIZE > 0
+# define GRALLOC_MEMSIZE	OMAP2_DSS_VRAM_SIZE*1024*1024
+#endif
+
+#ifdef ANDROID_PAN_FLIP
+# define GRALLOC_WIDTH		800
+# define GRALLOC_HEIGHT		960
+#else
+# define GRALLOC_WIDTH		800
+# define GRALLOC_HEIGHT		480
+#endif
+
+#define GRALLOC_VID_PLANES	2
+#define GRALLOC_VID_PAGES	2
+
+
 #if defined(CONFIG_FB_OMAP2) || defined(CONFIG_FB_OMAP2_MODULE)
 
 static struct omap2_mcspi_device_config mipid_mcspi_config = {
@@ -240,6 +258,7 @@ struct regulator_init_data rx51_vdac_data = {
 	.consumer_supplies      = &rx51_vdac_supply,
 };
 
+
 static struct omapfb_platform_data omapfb_config;
 
 static size_t rx51_vrfb_min_phys_size(int bpp)
@@ -248,30 +267,47 @@ static size_t rx51_vrfb_min_phys_size(int bpp)
 	size_t landscape;
 	size_t portrait;
 
-	/* For physical screen resolution of 800x480. */
-	landscape = omap_vrfb_min_phys_size(800, 480, bytespp);
-	portrait = omap_vrfb_min_phys_size(480, 800, bytespp);
+	/* For physical screen resolution */
+	landscape = omap_vrfb_min_phys_size(GRALLOC_WIDTH, GRALLOC_HEIGHT, bytespp);
+	portrait = omap_vrfb_min_phys_size(GRALLOC_HEIGHT, GRALLOC_WIDTH, bytespp);
 
 	return max(landscape, portrait);
 }
 
+static size_t rx51_vrfb_min_plane_size(int bpp)
+{
+	unsigned bytespp = bpp >> 3;
+	size_t mem_size;
+	size_t xres, yres;
+
+	xres = GRALLOC_WIDTH + 4;
+	yres = GRALLOC_WIDTH + 8;
+	
+	/* VID planes, buffers, resolution. */
+	mem_size = GRALLOC_VID_PLANES * GRALLOC_VID_PAGES * PAGE_ALIGN(bytespp * xres * yres);
+	
+	return mem_size;
+}
 
 static void __init rx51_add_gfx_fb(u32 paddr, size_t size, enum omapfb_color_format format)
 {
 	omapfb_config.mem_desc.region_cnt = 1;
+
 	omapfb_config.mem_desc.region[0].paddr = paddr;
 	omapfb_config.mem_desc.region[0].size = size;
 	omapfb_config.mem_desc.region[0].format = format;
 	omapfb_config.mem_desc.region[0].format_used = 1;
+
 	omapfb_set_platform_data(&omapfb_config);
 }
 
-static void __init rx51_detect_vram(size_t vid_plane_mem_size)
+static void __init rx51_detect_vram(void)
 {
 	unsigned long vram_paddr;
 	size_t vram_size;
 	unsigned long gfx_paddr;
 	size_t gfx_size;
+	size_t vid_size;
 	enum omapfb_color_format format;
 
 	gfx_paddr = dss_boottime_get_plane_base(0);
@@ -279,19 +315,27 @@ static void __init rx51_detect_vram(size_t vid_plane_mem_size)
 	if (gfx_paddr == -1UL)
 		return;
 
-	gfx_size = rx51_vrfb_min_phys_size(dss_boottime_get_plane_bpp(0));
+	gfx_size = PAGE_ALIGN(rx51_vrfb_min_phys_size(dss_boottime_get_plane_bpp(0)));
+
+#ifdef GRALLOC_MEMSIZE
+	vid_size = PAGE_ALIGN( GRALLOC_MEMSIZE - gfx_size );
+#else
+	vid_size = rx51_vrfb_min_plane_size(16);
+#endif
+	pr_debug("VRAM: GFX size: %d, VID size:%d", gfx_size, vid_size);
+	
+	vram_size = gfx_size + vid_size;
+	vram_paddr = gfx_paddr - vid_size;
+	
 	format = dss_boottime_get_plane_format(0);
-
-	vram_size = PAGE_ALIGN(gfx_size) + PAGE_ALIGN(vid_plane_mem_size);
-	vram_paddr = gfx_paddr + PAGE_ALIGN(gfx_size) - vram_size;
-
+	
 	rx51_add_gfx_fb(gfx_paddr, gfx_size, format);
-
+	
 	if (reserve_bootmem(vram_paddr, vram_size, BOOTMEM_EXCLUSIVE) < 0) {
 		pr_err("FB: can't reserve VRAM region\n");
 		return;
 	}
-
+	
 	if (omap_vram_add_region(vram_paddr, vram_size) < 0) {
 		free_bootmem(vram_paddr, vram_size);
 		pr_err("Can't set VRAM region\n");
@@ -302,20 +346,29 @@ static void __init rx51_detect_vram(size_t vid_plane_mem_size)
 		vram_size, vram_paddr, gfx_size, gfx_paddr);
 }
 
-static void __init rx51_alloc_vram(size_t vid_plane_mem_size)
+static void __init rx51_alloc_vram(void)
 {
 	unsigned long vram_paddr;
 	size_t vram_size;
 	size_t gfx_size;
+	size_t vid_size;
 
-	gfx_size = rx51_vrfb_min_phys_size(16);
+	vid_size = PAGE_ALIGN(rx51_vrfb_min_plane_size(16));
 
-	vram_size = PAGE_ALIGN(gfx_size) + PAGE_ALIGN(vid_plane_mem_size);
+#ifdef GRALLOC_MEMSIZE
+	gfx_size = PAGE_ALIGN(GRALLOC_MEMSIZE - vid_size);
+#else
+	gfx_size = PAGE_ALIGN(rx51_vrfb_min_phys_size(16));
+#endif
+	pr_info("VRAM: GFX size: %d, VID size:%d", gfx_size, vid_size);
+	
+	vram_size = gfx_size + vid_size;
 	vram_paddr = virt_to_phys(alloc_bootmem_pages(vram_size));
+	
 	BUG_ON(vram_paddr & ~PAGE_MASK);
-
+	
 	rx51_add_gfx_fb(vram_paddr, gfx_size, OMAPFB_COLOR_RGB565);
-
+	
 	if (omap_vram_add_region(vram_paddr, vram_size) < 0) {
 		free_bootmem(vram_paddr, vram_size);
 		pr_err("Can't set VRAM region\n");
@@ -328,15 +381,10 @@ static void __init rx51_alloc_vram(size_t vid_plane_mem_size)
 
 void __init rx51_video_mem_init(void)
 {
-	size_t vid_plane_mem_size;
-
-	/* 2 VID planes, 2 buffers, 2 bytes per pixel, 864x648 resolution. */
-	vid_plane_mem_size = 2 * 2 * PAGE_ALIGN(2 * 864 * 648);
-
 	if (dss_boottime_plane_is_enabled(0))
-		rx51_detect_vram(vid_plane_mem_size);
+		rx51_detect_vram();
 	else
-		rx51_alloc_vram(vid_plane_mem_size);
+		rx51_alloc_vram();
 }
 
 static int __init rx51_video_init(void)
@@ -347,7 +395,9 @@ static int __init rx51_video_init(void)
 	platform_add_devices(rx51_video_devices, ARRAY_SIZE(rx51_video_devices));
 	spi_register_board_info(rx51_video_spi_board_info,
 			ARRAY_SIZE(rx51_video_spi_board_info));
+
 	acx565akm_dev_init();
+
 	return 0;
 }
 
