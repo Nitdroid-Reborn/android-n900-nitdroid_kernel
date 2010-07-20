@@ -77,16 +77,16 @@ static struct platform_device rx51_smc91x_device = {
 };
 
 static struct tsc2005_platform_data tsc2005_config = {
-	.ts_x_plate_ohm		= 280,
+	.ts_x_plate_ohm		= 320,
 	.ts_hw_avg		= 0,
-	.ts_touch_pressure	= 1500,
+	.ts_touch_pressure	= 1200,
 	.ts_stab_time		= 1000,
 	.ts_pressure_max	= 2048,
 	.ts_pressure_fudge	= 2,
 	.ts_x_max		= 4096,
 	.ts_x_fudge		= 4,
 	.ts_y_max		= 4096,
-	.ts_y_fudge		= 7,
+	.ts_y_fudge		= 4,
 
 	.esd_timeout		= 8*1000, /* ms of inactivity before we check */
 
