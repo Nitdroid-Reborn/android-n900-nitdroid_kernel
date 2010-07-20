@@ -562,8 +562,6 @@ static void  __exit alarm_exit(void)
 	platform_driver_unregister(&alarm_driver);
 }
 
-#if 0
 late_initcall(alarm_late_init);
 module_init(alarm_init);
 module_exit(alarm_exit);
-#endif
