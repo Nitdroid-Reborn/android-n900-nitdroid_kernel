@@ -35,16 +35,7 @@
 #define SW_LENS_COVER			0x0A
 
 
-static struct omap_gpio_switch rx51_gpio_switches[] = {
-	{
-		.name 			= "headphone",
-		.gpio			= RX51_HEADPHONE_INSERT_GPIO,
-		.debounce_rising	= 100,
-		.debounce_falling	= 100,
-	}
-};
-
-static struct gpio_keys_button rx51_gpio_keys_buttons[] = {
+struct gpio_keys_button rx51_gpio_keys_buttons[] = {
 	{
 		.type			= EV_KEY,
 		.code			= KEY_SCREENLOCK,
@@ -95,6 +86,10 @@ static struct gpio_keys_button rx51_gpio_keys_buttons[] = {
 	},
 };
 
+
+const int rx51_gpio_keys_buttons_count = ARRAY_SIZE(rx51_gpio_keys_buttons);
+
+
 static struct gpio_keys_platform_data rx51_gpio_keys_data =
 {
 	.buttons	= rx51_gpio_keys_buttons,
@@ -117,11 +112,7 @@ static struct platform_device *rx51_gpio_devices[] = {
 
 void __init rx51_gpio_init(void)
 {
-	omap_register_gpio_switches(rx51_gpio_switches,
-				    ARRAY_SIZE(rx51_gpio_switches));
-
 	platform_add_devices(rx51_gpio_devices,
 			     ARRAY_SIZE(rx51_gpio_devices));
-	
 }
 

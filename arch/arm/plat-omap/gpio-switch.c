@@ -20,11 +20,16 @@
 #include <linux/timer.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/gpio_keys.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
 #include <mach/mux.h>
 #include <mach/board.h>
 #include <mach/gpio-switch.h>
+
+extern struct gpio_keys_button rx51_gpio_keys_buttons[];
+
+extern const int rx51_gpio_keys_buttons_count;
 
 struct gpio_switch {
 	char		name[14];
@@ -385,13 +390,23 @@ static int __init add_atag_switches(void)
 {
 	const struct omap_gpio_switch_config *cfg;
 	struct gpio_switch *sw;
-	int i, r;
+	int i, j, r;
 
 	for (i = 0; ; i++) {
 		cfg = omap_get_nr_config(OMAP_TAG_GPIO_SWITCH,
 					 struct omap_gpio_switch_config, i);
+		
 		if (cfg == NULL)
 			break;
+		
+	        for (j=0; j<rx51_gpio_keys_buttons_count; j++) {
+			if (cfg->gpio == rx51_gpio_keys_buttons[j].gpio)
+				goto next;
+		}
+		
+		printk(KERN_INFO "gpio-switch: %s [atag] gpio:%d type:%d flags:%d\n",
+		       cfg->name, cfg->gpio, cfg->type, cfg->flags);
+		
 		sw = kzalloc(sizeof(*sw), GFP_KERNEL);
 		if (sw == NULL) {
 			printk(KERN_ERR "gpio-switch: kmalloc failed\n");
@@ -407,6 +422,8 @@ static int __init add_atag_switches(void)
 			kfree(sw);
 			return r;
 		}
+	    next:
+		cfg = NULL;
 	}
 	return 0;
 }
@@ -565,11 +582,10 @@ static int __init gpio_sw_init(void)
 		goto err1;
 	}
 
-#ifdef CONFIG_OMAP_ATAG_SWITCHES
 	r = add_atag_switches();
 	if (r < 0)
 		goto err2;
-#endif
+
 	r = add_board_switches();
 	if (r < 0)
 		goto err2;
