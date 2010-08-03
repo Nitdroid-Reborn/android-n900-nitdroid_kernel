@@ -1,0 +1,7 @@
+To add extra kernel modules, either:
+
+  1) copy directories here from nitdroid-kernel-extras
+  2) create symlinks to the directories
+  
+The deb package generation will pick up these automatically.
+

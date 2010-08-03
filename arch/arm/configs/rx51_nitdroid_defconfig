@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.28.NIT.05
-# Tue Jul 20 19:12:00 2010
+# Linux kernel version: 2.6.28.NIT.06pre1
+# Tue Aug  3 12:15:52 2010
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1385,11 +1385,7 @@ CONFIG_I2C_BCM2048=m
 #
 # Graphics support
 #
-CONFIG_PVR=m
-CONFIG_PVR_RELEASE=y
-# CONFIG_PVR_DEBUG is not set
-# CONFIG_PVR_TIMING is not set
-# CONFIG_PVR_EXAMPLES is not set
+# CONFIG_PVR is not set
 # CONFIG_VGASTATE is not set
 # CONFIG_VIDEO_OUTPUT_CONTROL is not set
 CONFIG_FB=y

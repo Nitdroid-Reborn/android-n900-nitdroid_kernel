@@ -6,6 +6,8 @@ PACKAGE := $(shell dpkg-parsechangelog | awk '/^Source: / { print $$2 }')
 
 DESTDIR := $(CURDIR)/debian/$(PACKAGE)
 
+KERNEL  := $(shell pwd)
+
 
 configure: configure-stamp
 configure-stamp:
@@ -23,6 +25,11 @@ build-stamp: configure-stamp kernel-stamp
 kernel-stamp: configure-stamp
 	dh_testdir
 	$(MAKE) bzImage modules
+	@for dir in extras/* ; do \
+	    if [ -f $${dir}/Makefile ] ; then \
+	      $(MAKE) -C $${dir} KERNEL_SOURCE=$(KERNEL) modules ; \
+	    fi ; \
+	done
 	touch $@
 
 fake-stamps:
@@ -69,10 +76,19 @@ install: build
 	install -o root -g root -m 0755 -d $(DESTDIR)/and/system/lib/modules/$(VERSION)
 	install -o root -g root -m 0644 $(CURDIR)/debian/modules.boot $(DESTDIR)/and/system/lib/modules/$(VERSION)
 	install -o root -g root -m 0644 $(CURDIR)/debian/modules.maemo $(DESTDIR)/and/system/lib/modules/$(VERSION)
-	cat $(CURDIR)/modules.order | sed 's|^kernel/||g' | while read file ; do \
+	@cat $(CURDIR)/modules.order | sed 's|^kernel/||g' | while read file ; do \
 		echo "    $$file" ; \
 		install -o root -g root -m 0644 $$file $(DESTDIR)/and/system/lib/modules/$(VERSION) ; \
 		strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
+	done
+	@for dir in extras/* ; do \
+	    if [ -f $${dir}/Makefile ] ; then \
+	      find $${dir}/ -type f -name '*.ko' | while read file ; do \
+		echo "    $${file}" ; \
+		install -o root -g root -m 0644 $${file} $(DESTDIR)/and/system/lib/modules/$(VERSION) ; \
+		strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
+	      done ; \
+	    fi ; \
 	done
 
 
@@ -80,6 +96,11 @@ clean:
 	dh_testdir
 	dh_testroot
 	$(MAKE) distclean
+	@for dir in extras/* ; do \
+	    if [ -f $${dir}/Makefile ] ; then \
+	      $(MAKE) -C $${dir} KERNEL_SOURCE=$(KERNEL) clean ; \
+	    fi ; \
+	done
 	rm -f debian/preinst debian/postinst debian/prerm
 	rm -f build-stamp configure-stamp
 	dh_clean

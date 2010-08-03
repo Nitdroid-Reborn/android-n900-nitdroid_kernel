@@ -1,5 +1,28 @@
 The Debian Package nitdroid-kernel
-----------------------------------
+--------------------------------------------------------------------
 
 This is a Linux kernel for NITdroid, an Android port to N900.
+
+
+Instructions
+--------------------------------------------------------------------
+
+To compile:
+
+make rx51_nitdroid_defconfig
+make bzImage
+make modules
+
+
+To create .deb package:
+
+dpkg-buildpackage -b
+
+
+To include extra modules:
+
+Link/copy extra module directories into extras/
+e.g.  
+    cd extras/
+    ln -s ../../nitdroid-kernel-extras/pvrsrv .
 
