@@ -5,8 +5,8 @@
 #
 
 # Watchdogs
-#map_wdt
-#twl4030_wdt
+omap_wdt
+twl4030_wdt
 
 # Real Time Clock
 #rtc-core
@@ -75,14 +75,14 @@ iovmm
 #board-rx51-camera
 
 # power vr
-pvrsrvkm.ko
+pvrsrvkm
 omaplfb
 
 # fm transmitter
-#fmtx-si4713.ko
+#fmtx-si4713
 
 # autofocus
-ad5820.ko
+ad5820
 
 # torch
 adp1653
