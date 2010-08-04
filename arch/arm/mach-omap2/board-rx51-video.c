@@ -33,7 +33,7 @@
 #include <mach/display.h>
 #include <../drivers/video/omap2/displays/panel-acx565akm.h>
 
-/* #define ANDROID_PAN_FLIP */
+#define ANDROID_PAN_FLIP
 
 #if defined OMAP2_DSS_VRAM_SIZE && OMAP2_DSS_VRAM_SIZE > 0
 # define GRALLOC_MEMSIZE	OMAP2_DSS_VRAM_SIZE*1024*1024
