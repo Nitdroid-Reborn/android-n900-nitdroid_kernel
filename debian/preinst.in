@@ -14,19 +14,19 @@ prepare()
 {
 	if ! is_and_ok
 	then
-		echo "preinst: Android not found. MUST be mounted on '/and'"
+		echo "Android not found. MUST be mounted on '/and'"
 		exit 1
 	fi
 
 	if [ -d /and/system/lib/modules/@VERSION@ ]
 	then
-		echo "preinst: Deleting existing @VERSION@ modules in Android..."
+		echo "Deleting existing @VERSION@ modules in Android..."
 		rm -f -r /and/system/lib/modules/@VERSION@
 	fi
 
 	if [ -d /lib/modules/@VERSION@ ]
 	then
-		echo "preinst: Deleting existing @VERSION@ modules in Maemo..."
+		echo "Deleting existing @VERSION@ modules in Maemo..."
 		rm -f -r /lib/modules/@VERSION@
 	fi
 }
