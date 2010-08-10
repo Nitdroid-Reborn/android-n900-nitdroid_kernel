@@ -14,21 +14,30 @@ remove()
 {
 	if ! is_and_ok
 	then
-		echo "prerm: Android not found. MUST be mounted on '/and'"
+		echo "Android not found. MUST be mounted on '/and'"
 		exit 1
 	fi
 
 	if [ -d /and/system/lib/modules/@VERSION@ ]
 	then
-		echo "prerm: Deleting leftover @VERSION@ modules in Android..."
+		echo "Deleting leftover @VERSION@ modules in Android..."
 		rm -f -r /and/system/lib/modules/@VERSION@
 	fi
 
 	if [ -d /lib/modules/@VERSION@ ]
 	then
-		echo "prerm: Deleting leftover @VERSION@ modules in Maemo..."
+		echo "Deleting leftover @VERSION@ modules in Maemo..."
 		rm -f -r /lib/modules/@VERSION@
 	fi
+	
+	for item in /etc/multiboot.d/11-NITDroid-*-@VERSION@.item
+	do
+		if [ -f $item ]
+		then
+			echo "Deleting $item"
+			rm -f $item
+		fi
+	done
 
 	return 0
 }

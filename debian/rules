@@ -6,8 +6,6 @@ PACKAGE := $(shell dpkg-parsechangelog | awk '/^Source: / { print $$2 }')
 
 DESTDIR := $(CURDIR)/debian/$(PACKAGE)
 
-KERNEL  := $(shell pwd)
-
 
 configure: configure-stamp
 configure-stamp:
@@ -27,7 +25,7 @@ kernel-stamp: configure-stamp
 	$(MAKE) bzImage modules
 	@for dir in extras/* ; do \
 	    if [ -f $${dir}/Makefile ] ; then \
-	      $(MAKE) -C $${dir} KERNEL_SOURCE=$(KERNEL) modules ; \
+	      $(MAKE) M=$(CURDIR)/$${dir} KERNEL_SOURCE=$(CURDIR) modules ; \
 	    fi ; \
 	done
 	touch $@
@@ -98,7 +96,7 @@ clean:
 	$(MAKE) distclean
 	@for dir in extras/* ; do \
 	    if [ -f $${dir}/Makefile ] ; then \
-	      $(MAKE) -C $${dir} KERNEL_SOURCE=$(KERNEL) clean ; \
+	      $(MAKE) M=$(CURDIR)/$${dir} KERNEL_SOURCE=$(CURDIR) clean ; \
 	    fi ; \
 	done
 	rm -f debian/preinst debian/postinst debian/prerm

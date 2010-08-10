@@ -10,11 +10,47 @@ is_and_ok()
 	is_and_mounted && test -d /and/system/etc
 }
 
+create_item()
+{
+	ANDDEV=$(cat /proc/mounts | grep -F '/and' | cut -f 1 -d' ')
+	FSTYPE=$(cat /proc/mounts | grep -F '/and' | cut -f 3 -d' ')
+
+	FSDEV=${ANDDEV##/dev/}
+
+	if [ -b /dev/${FSDEV} ]
+	then
+		case ${FSDEV} in
+		    mmcblk0*)	DEVICE='${INT_CARD}'${FSDEV##mmcblk0} ;;
+		    mmcblk1*)   DEVICE='${EXT_CARD}'${FSDEV##mmcblk1} ;;
+		esac
+
+		case ${FSTYPE} in
+		    ext[234])	FSOPTS='rw,noatime,errors=remount-ro'
+				FSMODS=${FSTYPE}
+				;;
+
+			   *)	echo "Unsupported FS type"
+		    		exit 1
+				;;
+		esac
+
+		(
+			echo "ITEM_NAME=\"NITDroid @VERSION@ on ${FSDEV}\""
+			echo "ITEM_KERNEL=@VERSION@"
+			echo "ITEM_MODULES=${FSMODS}"
+			echo "ITEM_DEVICE=${DEVICE}"
+			echo "ITEM_FSTYPE=${FSTYPE}"
+			echo "ITEM_FSOPTIONS=${FSOPTS}"
+
+		) > /etc/multiboot.d/11-NITDroid-${FSDEV}-@VERSION@.item
+	fi
+}
+
 configure()
 {
 	if ! is_and_ok
 	then
-		echo "postinst: Android not mounted on '/and'. Can't do anything"
+		echo "Android not mounted on '/and'. Can't do anything"
 		exit 1
 	fi
 
@@ -39,6 +75,9 @@ configure()
 	echo "Running depmod..."
 	depmod -a @VERSION@
 	depmod -b /and/system -a @VERSION@
+
+	echo "Creating item file for multiboot"
+	create_item
 }
 
 
@@ -47,10 +86,10 @@ case "$1" in
     configure)
 	configure
 	;;
-	
+
     abort-*)
 	;;
-		
+
     *)
 	echo "postinst called with unhandled argument $1" >&2
 	exit 1
