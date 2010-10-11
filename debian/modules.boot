@@ -87,6 +87,13 @@ ad5820
 # torch
 adp1653
 
+# ASEC containers
+twofish_common
+twofish
+dm-mod
+dm-crypt
+dm-loop
+
 # Filesystems
 fat
 vfat

@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.28.NIT.06pre1
-# Tue Aug  3 12:15:52 2010
+# Linux kernel version: 2.6.28.NIT.06
+# Mon Oct 11 11:52:23 2010
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -2171,7 +2171,8 @@ CONFIG_CRYPTO_DES=y
 # CONFIG_CRYPTO_SEED is not set
 # CONFIG_CRYPTO_SERPENT is not set
 # CONFIG_CRYPTO_TEA is not set
-# CONFIG_CRYPTO_TWOFISH is not set
+CONFIG_CRYPTO_TWOFISH=m
+CONFIG_CRYPTO_TWOFISH_COMMON=m
 
 #
 # Compression
