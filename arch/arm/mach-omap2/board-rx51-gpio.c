@@ -69,14 +69,6 @@ struct gpio_keys_button rx51_gpio_keys_buttons[] = {
 		.debounce_interval	= 100,
 	}, 
 	{
-		.type			= EV_KEY,
-		.code			= KEY_LINEFEED,
-		.gpio			= RX51_PROXIMITY_SENSOR_GPIO,
-		.desc			= "proximity sensor",
-		.active_low		= 1,
-		.debounce_interval	= 30,
-	}, 
-	{
 		.type			= EV_SW,
 		.code			= SW_LID,
 		.gpio			= RX51_KB_SLIDE_GPIO,
