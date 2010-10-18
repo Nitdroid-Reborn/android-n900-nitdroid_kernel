@@ -1483,7 +1483,7 @@ static DSP_STATUS WMD_BRD_MemMap(struct WMD_DEV_CONTEXT *hDevContext,
 	numUsrPgs =  PAGE_ALIGN(ulNumBytes) / PG_SIZE_4K;
 
 	DBG_Trace(DBG_LEVEL4, "%s :numOfActualTabEntries=%d, ulNumBytes= %d\n",
-		  %s, numUsrPgs, ulNumBytes);
+		  __func__, numUsrPgs, ulNumBytes);
 
 	if (vma->vm_flags & (VM_IO | VM_PFNMAP | VM_RESERVED)) {
 		for (nr_pages = numUsrPgs; nr_pages > 0;) {
