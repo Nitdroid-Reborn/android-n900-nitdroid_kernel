@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.28.NIT.06
-# Mon Oct 11 11:52:23 2010
+# Thu Oct 28 23:20:51 2010
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -937,6 +937,8 @@ CONFIG_PPP_BSDCOMP=m
 CONFIG_PPP_MPPE=m
 CONFIG_PPPOE=m
 CONFIG_PPPOL2TP=m
+CONFIG_PPPOLAC=m
+CONFIG_PPPOPNS=m
 # CONFIG_SLIP is not set
 CONFIG_SLHC=m
 # CONFIG_NETCONSOLE is not set
