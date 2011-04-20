@@ -215,6 +215,8 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		val->intval = bq27x00_battery_voltage(di);
 		if (psp == POWER_SUPPLY_PROP_PRESENT)
 			val->intval = val->intval <= 0 ? 0 : 1;
+		else
+			val->intval *= 1000; // Android expects voltage in uV
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = bq27x00_battery_current(di);
