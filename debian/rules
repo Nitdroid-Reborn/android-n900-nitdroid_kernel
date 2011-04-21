@@ -77,14 +77,14 @@ install: build
 	@cat $(CURDIR)/modules.order | sed 's|^kernel/||g' | while read file ; do \
 		echo "    $$file" ; \
 		install -o root -g root -m 0644 $$file $(DESTDIR)/and/system/lib/modules/$(VERSION) ; \
-		strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
+		$(CROSS_COMPILE)strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
 	done
 	@for dir in extras/* ; do \
 	    if [ -f $${dir}/Makefile ] ; then \
 	      find $${dir}/ -type f -name '*.ko' | while read file ; do \
 		echo "    $${file}" ; \
 		install -o root -g root -m 0644 $${file} $(DESTDIR)/and/system/lib/modules/$(VERSION) ; \
-		strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
+		$(CROSS_COMPILE)strip --remove-section=.comment --remove-section=.note --strip-unneeded $(DESTDIR)/and/system/lib/modules/$(VERSION)/$${file##*/} ; \
 	      done ; \
 	    fi ; \
 	done
