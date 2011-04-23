@@ -18,6 +18,11 @@ To create .deb package:
 
 dpkg-buildpackage -b
 
+To create .deb package on non-Debian Linux using Android toolchain:
+cd ~/nitdroid/gingerbread/
+source build/envsetup.sh && lunch n900-eng
+cd ../nitdroid-kernel
+CROSS_COMPILE=arm-eabi- dpkg-buildpackage -b -aarmel -rfakeroot -j5
 
 To include extra modules:
 
