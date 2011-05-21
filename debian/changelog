@@ -1,3 +1,8 @@
+nitdroid-kernel-2.6.28-07 (rc3) unstable; urgency=low
+  * 2.6.28.NIT.07 Release.
+
+ -- Alexey Roslyakov <alexey.roslyakov@newsycat.com>  Sat, 21 May 2011 13:13:00 +0400
+
 nitdroid-kernel-2.6.28-06 (final1) unstable; urgency=low
 
   * 2.6.28.NIT.06 Release.

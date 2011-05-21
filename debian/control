@@ -1,11 +1,11 @@
-Source: nitdroid-kernel-2.6.28-06
+Source: nitdroid-kernel-2.6.28-07
 Section: user/system
 Priority: extra
 Maintainer: Jay Cartman <jay.cartman@gmail.com>
 Build-Depends: debhelper (>= 5)
 Standards-Version: 3.7.2
 
-Package: nitdroid-kernel-2.6.28-06
+Package: nitdroid-kernel-2.6.28-07
 Architecture: armel
 Section: user/system
 Depends: 
